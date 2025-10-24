@@ -1,0 +1,51 @@
+bbPrior                 Priors on model space for variable selection
+                        problems
+bestBIC                 Model with best AIC, BIC, EBIC or other general
+                        information criteria (getIC)
+bfnormmix               Number of Normal mixture components under
+                        Normal-IW and Non-local priors
+cil                     Treatment effect estimation for linear models
+                        via Confounder Importance Learning using
+                        non-local priors.
+dalapl                  Density and random draws from the asymmetric
+                        Laplace distribution
+ddir                    Dirichlet density
+diwish                  Density for Inverse Wishart distribution
+dmom                    Non-local prior density, cdf and quantile
+                        functions.
+dpostNIW                Posterior Normal-IWishart density
+eprod                   Expectation of a product of powers of Normal or
+                        T random variables
+getBIC                  Obtain AIC, BIC, EBIC or other general
+                        information criteria (getIC)
+hald                    Hald Data
+icfit-class             Class "icfit"
+icov                    Extract estimated inverse covariance
+localnulltest           Local variable selection
+marginalNIW             Marginal likelihood under a multivariate Normal
+                        likelihood and a conjugate Normal-inverse
+                        Wishart prior.
+mixturebf-class         Class "mixturebf"
+modelSelection          Bayesian variable selection for linear models
+                        via non-local priors.
+modelSelectionGGM       Bayesian variable selection for linear models
+                        via non-local priors.
+mombf                   Moment and inverse moment Bayes factors for
+                        linear models.
+momknown                Bayes factors for moment and inverse moment
+                        priors
+msPriorSpec-class       Class "msPriorSpec"
+msfit-class             Class "msfit"
+msfit_ggm-class         Class "msfit_ggm"
+nlpmarginals            Marginal density of the observed data for
+                        linear regression with Normal, two-piece
+                        Normal, Laplace or two-piece Laplace residuals
+                        under non-local and Zellner priors
+plotprior               Plot estimated marginal prior inclusion
+                        probabilities
+postModeOrtho           Bayesian model selection and averaging under
+                        block-diagonal X'X for linear models.
+postProb                Obtain posterior model probabilities
+postSamples             Extract posterior samples from an object
+priorp2g                Moment and inverse moment prior elicitation
+rnlp                    Posterior sampling for regression parameters
