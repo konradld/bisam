@@ -158,7 +158,9 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50) {
   t_admissible <- length(times_all)
   
   # Calculate overall plot index for balanced panel
-  results_table <- results_table[order(results_table$unit_idx, results_table$start_time), ]
+  if(length(results_table$unit_idx > 0)) {
+    results_table <- results_table[order(results_table$unit_idx, results_table$start_time), ]
+  }
   results_table$position_idx <- (results_table$unit_idx - 1) * t_admissible + results_table$time_idx
   
   return(results_table)
