@@ -148,7 +148,6 @@ estimate_bisam <- function(
   # --- Sigma^2 Prior ---
   if (is.null(sigma2_shape) | is.null(sigma2_rate)) {
     print("Sigma^2 prior is inadmissable. Using default spec. based on OLS")
-    source("./00_code/04_nlp_implementation/BISAM_clean/inv_gamma_params_fun.R")
     if (do_cluster_s2) {
       sigma2_shape <- sigma2_rate <- numeric(n)
       for (i in 1:n) {
