@@ -185,6 +185,7 @@ estimate_bisam <- function(
     best_lambda <- cv.glmnet(X, y, alpha = 1)$lambda.min
     beta_mean <- as.array(coef(lasso_model, s = best_lambda))[-1]
   }
+  beta_var_inv <- XX / beta_variance_scale
   
   # --- Structural Break Prior (MOM/iMOM) ---
   if (step_size_prior == "imom") {
@@ -342,7 +343,7 @@ estimate_bisam <- function(
     if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso") {
       if (do_cluster_s2) {
         BN <- Matrix::solve(crossprod(X * (1 / s2_i + 1 / beta_variance_scale), X))
-        bN <- BN %*% (crossprod(X / s2_i, y_tmp) + XX_inv / beta_variance_scale * beta_mean)
+        bN <- BN %*% (crossprod(X / s2_i, y_tmp) + beta_var_inv %*% beta_mean)
       } else {
         BN <- s2_i_unique * beta_variance_scale / (s2_i_unique + beta_variance_scale) * XX_inv
         bN <- 1 / (s2_i_unique + beta_variance_scale) * 
