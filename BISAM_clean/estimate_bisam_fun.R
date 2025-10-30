@@ -19,6 +19,7 @@ estimate_bisam <- function(
     beta_variance_scale = 1000, # Variance scaling parameter for beta coefficients
     sigma2_shape = NULL,        # Inverse Gamma shape parameter for sigma^2
     sigma2_rate = NULL,         # Inverse Gamma rate parameter for sigma^2
+    sigma2_hyper_p = 0.9,       # Probability that the true sigma^2 is smaller than OLS (if sigma2 params are NULL)
     step_incl_prob = 0.5,       # Bernoulli inclusion probability
     step_incl_alpha = 1,        # Beta-Bernoulli alpha parameter
     step_incl_beta = 1,         # Beta-Bernoulli beta parameter
@@ -156,7 +157,7 @@ estimate_bisam <- function(
         X_tmp <- X_tmp[, colSums(X_tmp != 0) > 1, drop = FALSE] # >1 to drop TFE
         mod_prior <- lm.fit(as.matrix(X_tmp), y[n_idx])
         s2_OLS <- sum(mod_prior$residuals^2) / mod_prior$df.residual
-        s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = 0.9)
+        s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = sigma2_hyper_p)
         sigma2_shape[i] <- s2_pars$shape
         sigma2_rate[i] <- s2_pars$rate
       }
