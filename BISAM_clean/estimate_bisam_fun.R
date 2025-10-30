@@ -341,8 +341,10 @@ estimate_bisam <- function(
     # DRAW p(beta | sigma^2, gamma, y)
     # ==========================================================================
     if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso") {
+      XtSX <- crossprod(X / s2_i, X)  # More efficient than X' %*% diag(w) %*% X
+      beta_var_inv <- XtSX / beta_variance_scale
       if (do_cluster_s2) {
-        BN <- Matrix::solve(crossprod(X * (1 / s2_i + 1 / beta_variance_scale), X))
+        BN <- Matrix::solve(crossprod(X * (1 / s2_i + 1 / (beta_variance_scale * s2_i)), X))
         bN <- BN %*% (crossprod(X / s2_i, y_tmp) + beta_var_inv %*% beta_mean)
       } else {
         BN <- s2_i_unique * beta_variance_scale / (s2_i_unique + beta_variance_scale) * XX_inv
