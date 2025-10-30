@@ -347,9 +347,9 @@ estimate_bisam <- function(
         BN <- Matrix::solve(crossprod(X * (1 / s2_i + 1 / (beta_variance_scale * s2_i)), X))
         bN <- BN %*% (crossprod(X / s2_i, y_tmp) + beta_var_inv %*% beta_mean)
       } else {
-        BN <- s2_i_unique * beta_variance_scale / (s2_i_unique + beta_variance_scale) * XX_inv
-        bN <- 1 / (s2_i_unique + beta_variance_scale) * 
-          (beta_variance_scale * XX_inv %*% crossprod(X, y_tmp) + s2_i_unique * beta_mean)
+        BN <- s2_i_unique * beta_variance_scale / (1 + beta_variance_scale) * XX_inv
+        bN <- 1 / (1 + beta_variance_scale) * 
+          (beta_variance_scale * XX_inv %*% crossprod(X, y_tmp) + beta_mean)
       }
     } else {
       stop("For 'beta' only g-prior and fractional-prior is implemented!")
