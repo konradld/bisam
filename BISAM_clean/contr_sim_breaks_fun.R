@@ -65,9 +65,9 @@ contr_sim_breaks <- function(
   a <- tr_a*outl.mean
   
   # SIS
-  Z <- kronecker(diag(n),lower.tri(matrix(1,nrow=t,ncol=t),diag = T)[,-c(1,t*iis)])
-  tr_g <- rep(0,n*(t-1-iis))
-  tr_g[(pos.step%/%t)*(t-1-iis)+pos.step%%t-1] <- 1
+  Z <- kronecker(diag(n),lower.tri(matrix(1,nrow=t,ncol=t),diag = T)[,-c(1:2,t)])
+  tr_g <- rep(0,n*(t-3))
+  tr_g[(pos.step%/%t)*(t-3)+pos.step%%t-2] <- 1
   g <- tr_g*step.mean
   
   e <- rnorm(n*t,0,error.sd)
@@ -80,7 +80,7 @@ contr_sim_breaks <- function(
   y <- X%*%b + I%*%a + Z%*%g + e
   
   tr.ind <- cbind(which(t(matrix(a,ncol=t,byrow = T))!=0,arr.ind = T),a[a!=0])
-  tr.stp <- cbind(which(t(cbind(rep(0,n),matrix(g,ncol=(t-1-iis),byrow = T)))!=0,arr.ind = T),g[g!=0])
+  tr.stp <- cbind(which(t(cbind(rep(0,n),matrix(g,ncol=(t-3),byrow = T)))!=0,arr.ind = T),g[g!=0])
   if(length(tr.ind)!=0){
     rownames(tr.ind) <- paste('iis',tr.ind[,2],tr.ind[,1],sep = '.')
   }
