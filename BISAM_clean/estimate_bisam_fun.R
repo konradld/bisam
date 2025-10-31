@@ -153,7 +153,7 @@ estimate_bisam <- function(
       sigma2_shape <- sigma2_rate <- numeric(n)
       for (i in 1:n) {
         n_idx <- N_idx[i,]
-        X_tmp <- X[n_idx,]
+        X_tmp <- X[n_idx, , drop = FALSE]
         X_tmp <- X_tmp[, colSums(X_tmp != 0) > 1, drop = FALSE] # >1 to drop TFE
         mod_prior <- lm.fit(as.matrix(X_tmp), y[n_idx])
         s2_OLS <- sum(mod_prior$residuals^2) / mod_prior$df.residual
