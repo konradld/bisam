@@ -4,7 +4,6 @@
 
 rm(list = ls())
 library(mombf)
-setwd("~/BBD/")
 
 set.seed(192837612)
 
@@ -53,7 +52,7 @@ S2_TRUE <- ERROR_SD^2
 # DATA SIMULATION
 # ==============================================================================
 
-source("./00_code/04_nlp_implementation/BISAM_clean/contr_sim_breaks_fun.R")
+source("./BISAM_clean/contr_sim_breaks_fun.R")
 
 sim <- contr_sim_breaks(
   n = Ni, 
@@ -130,8 +129,11 @@ NBURN <- 200L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 1000
+
 SIGMA2_SHAPE <- NULL
 SIGMA2_RATE <- NULL
+SIGMA2_HYPER_P <- 0.9
+
 STEP_INCL_PROB <- 0.5
 STEP_INCL_ALPHA <- 1
 STEP_INCL_BETA <- 1
@@ -150,7 +152,7 @@ OUTLIER_INCL_ALPHA <- 1
 OUTLIER_INCL_BETA <- 10
 OUTLIER_SCALE <- 10
 # Set computational strategy
-DO_SPARSE_COMPUTATION <- TRUE
+DO_SPARSE_COMPUTATION <- FALSE
 # Check model Validity
 DO_GEWEKE_TEST <- FALSE
 
@@ -158,7 +160,7 @@ DO_GEWEKE_TEST <- FALSE
 # RUN MODEL
 # ==============================================================================
 
-source("./00_code/04_nlp_implementation/BISAM_clean/estimate_bisam_fun.R")
+source("./BISAM_clean/estimate_bisam_fun.R")
 
 data = data
 do_constant = DO_CONST
@@ -180,6 +182,7 @@ step_incl_prior = STEP_INCL_PRIOR
 beta_variance_scale = BETA_VARIANCE_SCALE
 sigma2_shape = SIGMA2_SHAPE
 sigma2_rate = SIGMA2_RATE
+sigma2_hyper_p = SIGMA2_HYPER_P
 step_incl_prob = STEP_INCL_PROB
 step_incl_alpha = STEP_INCL_ALPHA
 step_incl_beta = STEP_INCL_BETA
@@ -214,6 +217,7 @@ mod <- estimate_bisam(
   beta_variance_scale = BETA_VARIANCE_SCALE,
   sigma2_shape = SIGMA2_SHAPE,
   sigma2_rate = SIGMA2_RATE,
+  sigma2_hyper_p = SIGMA2_HYPER_P,
   step_incl_prob = STEP_INCL_PROB,
   step_incl_alpha = STEP_INCL_ALPHA,
   step_incl_beta = STEP_INCL_BETA,
