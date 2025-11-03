@@ -25,7 +25,7 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50, cre
     unit_times <- times[unit_indices]
     
     # Sort by time
-    time_order <- order(unit_times)
+    time_order <- order(as.numeric(unit_times))
     sorted_indices <- unit_indices[time_order]
     sorted_times <- unit_times[time_order]
     
