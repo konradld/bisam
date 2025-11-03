@@ -1,34 +1,73 @@
-par_iter_fun <- function(
-    Ni=n,
-    Nt=t,
-    NX=nx,
-    DO_OUTLIERS=iis,
-    DO_STEP_SATURATION=sis,
-    DO_CONST=const,
-    DO_INDIV_FE = ife,
-    DO_TIME_FE = tfe,
-    POS_OUTL = pos.outl,
-    POS_STEP = pos.step,
-    OUTL_MEAN=outl.mean,
-    STEP_MEAN_REL=step.mean,
-    ERROR_SD=error.sd,
-    PRIOR = prior_fam,
-){
-  
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#                       Method Comparison for Break Detection
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 # ==============================================================================
 # SETUP AND INITIALIZATION
 # ==============================================================================
 
 rm(list = ls())
+library(stringr)
+library(gets)
+library(getspanel)
+library(Matrix)
 library(mombf)
 
-set.seed(192837612)
+# Get SLURM array ID
+run <- commandArgs(trailingOnly = TRUE)
+run_numeric <- as.numeric(run)
+
+# Make sure we have a valid index
+if (length(run) == 0 || is.na(run_numeric)) {
+  stop("No valid array task ID provided")
+}
+
+
+config <- expand.grid(
+  sis_prior = c("mom", "imom"),
+  gets_lvl = c(0.05,0.01),
+  rel_effect = c(1, 1.5, 2, 3, 6, 10),
+  number_reps = 1:64,
+  stringsAsFactors = FALSE
+)
+conf <- config[run_numeric,]
 
 # ==============================================================================
 # SIMULATION PARAMETERS
 # ==============================================================================
 
-POS_STEP_IN_Z <- POS_STEP - 2 * (POS_STEP %/% Nt + 1) - (POS_STEP %/% Nt)
+# Prior specification
+PRIOR <- conf$sis_prior
+
+# Data dimensions
+Ni <- 10          # number of sim. observations
+Nt <- 30          # number of sim. time periods
+NX <- 0           # number of regressors
+
+# Model structure
+DO_CONST <- TRUE    # inclusion of a constant
+DO_INDIV_FE <- FALSE     # inclusion of indiv. fixed effects
+DO_TIME_FE <- FALSE     # inclusion of time fixed effects
+DO_OUTLIERS <- FALSE      # inclusion of indicator saturation
+DO_STEP_SATURATION <- TRUE      # inclusion of stepshift saturation
+DO_INDICATOR_SATURATION = FALSE
+# Outlier and break parameters
+P_OUTL <- 0.0    # probability of outlier in a Series
+P_STEP <- 0.0    # probability of a stepshift in a Series
+# Error distribution
+ERROR_SD <- 1   # standard deviation of the error
+# Outlier characteristics
+OUTL_MEAN <- 0   # mean of size of outlier
+# Stepshift characteristics
+STEP_MEAN_REL <- conf$rel_effect    # relative mean of size of stepshift in error.sd
+
+# Break positions
+POS_OUTL <- 0
+
+# Sample random breaks in the first 4 observations
+POS_STEP_IN_Z <- sapply(1:4, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
+
+POS_STEP <- POS_STEP_IN_Z + 2 * (POS_STEP_IN_Z %/% (Nt - 3) + 1) + POS_STEP_IN_Z %/% (Nt - 3)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
 S2_TRUE <- ERROR_SD^2
 
@@ -64,47 +103,46 @@ sim <- contr_sim_breaks(
   # =========================== GETS =======================================.=====
   
   results$gets <- list() # initiate new sub-list
-  
-  significance_levels <- c(0.05,0.01)
+
   formula  <- paste('y',
                     paste(colnames(dat)[grepl('x\\d+',colnames(data))],collapse = '+'),
                     sep = '~')
+  
   if(NX==0 & DO_CONST){formula <- 'y~c'} #--------------------------------------------- careful not always true !!
   
   index = c("n","t")
   
   # Break analysis:
-  for(sig_lvl in significance_levels){
+  sig_lvl <- conf$gets_lvl
     
-    # run model
-    res_i <- isatpanel(
-      data = cbind(dat, c = 1),
-      formula = as.formula(formula),
-      index = index,
-      effect = "none",
-      iis = DO_INDICATOR_SATURATION,
-      jsis = FALSE,
-      fesis = TRUE,
-      t.pval = sig_lvl,
-      print.searchinfo = FALSE
-    )
-    
-    # fix names
-    gets_breaks <- res_i$isatpanel.result$mean.results %>%
-      rownames() %>%
-      str_replace_all(c(
-        "x" = "beta.x",
-        "time" = "tfe.",
-        "id" = "ife.",
-        "(fesis|sis)" = "sis.",
-        "iis" = "iis."
-      ))
-    
-    gets_coefs <- res_i$isatpanel.result$mean.results
-    rownames(gets_coefs) <- gets_breaks
-    
-    results$gets[[as.character(sig_lvl)]]<-gets_coefs
-  }
+  # run model
+  res_i <- isatpanel(
+    data = cbind(dat, c = 1),
+    formula = as.formula(formula),
+    index = index,
+    effect = "none",
+    iis = DO_INDICATOR_SATURATION,
+    jsis = FALSE,
+    fesis = TRUE,
+    t.pval = sig_lvl,
+    print.searchinfo = FALSE
+  )
+  
+  # fix names
+  gets_breaks <- res_i$isatpanel.result$mean.results %>%
+    rownames() %>%
+    str_replace_all(c(
+      "x" = "beta.x",
+      "time" = "tfe.",
+      "id" = "ife.",
+      "(fesis|sis)" = "sis.",
+      "iis" = "iis."
+    ))
+  
+  gets_coefs <- res_i$isatpanel.result$mean.results
+  rownames(gets_coefs) <- gets_breaks
+  
+  results$gets[[as.character(sig_lvl)]] <- gets_coefs
   
   # =========================== Bayesian SSVS ==============================.=====
 
@@ -158,6 +196,7 @@ sim <- contr_sim_breaks(
   } else {
     stop("selected prior not implemented")
   }
+  
   # ==============================================================================
   # RUN MODEL
   # ==============================================================================
@@ -227,7 +266,7 @@ sim <- contr_sim_breaks(
   ssvs_breaks_t2 <- pip_window(results$b_ssvs_1, win_size = 2, op = ">=", pip_threshold = 0.75)
   ssvs_breaks_t2 <- make_sis_names(ssvs_breaks_t2)
   
-  gets_breaks01 <- rownames(results$gets$`0.01`)[grepl("iis.+|sis.+",rownames(results$gets$`0.01`))]
+  gets_breaks01 <- rownames(results$gets$`0.01`)[grepl("iis.+|sis.+",rownames(results$gets[[1]]))]
   all_breaks01  <- str_sort(unique(c(tr_breaks,ssvs_breaks,gets_breaks01,ssvs_breaks_t2)),numeric = T)
   
   #check immediate neighbourhood
@@ -247,37 +286,52 @@ sim <- contr_sim_breaks(
   ))
   tr_breaks_nbh  <- tr_breaks_nbh_[!tr_breaks_nbh_%in%tr_breaks]
   
-  break_comparison01 <- matrix(NA,nrow = length(all_breaks01),ncol = 15)
-  colnames(break_comparison01) <- c("true","ssvs","gets",
+  break_comparison <- matrix(NA,nrow = length(all_breaks01),ncol = 15)
+  colnames(break_comparison) <- c("true","ssvs","gets",
                                     "tr.ssvs", "tr.gets",
                                     "fp.ssvs","fp.gets",
                                     "fn.ssvs","fn.gets",
                                     "tr.both","fp.both","fn.both","ssvs_1nn_fp","gets_1nn_fp","ssvs_t3_tr")
-  rownames(break_comparison01) <- all_breaks01
+  rownames(break_comparison) <- all_breaks01
   
   # which are true/found
-  break_comparison01[,1] <- ifelse(all_breaks01%in%tr_breaks,1,0)
-  break_comparison01[,2] <- ifelse(all_breaks01%in%ssvs_breaks,1,0)
-  break_comparison01[,3] <- ifelse(all_breaks01%in%gets_breaks01,1,0)
+  break_comparison[,1] <- ifelse(all_breaks01%in%tr_breaks,1,0)
+  break_comparison[,2] <- ifelse(all_breaks01%in%ssvs_breaks,1,0)
+  break_comparison[,3] <- ifelse(all_breaks01%in%gets_breaks01,1,0)
   # which are true positive
-  break_comparison01[,4] <- (break_comparison01[,2]+break_comparison01[,1])== 2
-  break_comparison01[,5] <- (break_comparison01[,3]+break_comparison01[,1])== 2
+  break_comparison[,4] <- (break_comparison[,2]+break_comparison[,1])== 2
+  break_comparison[,5] <- (break_comparison[,3]+break_comparison[,1])== 2
   # which are false positive
-  break_comparison01[,6] <- (break_comparison01[,2]-break_comparison01[,1])== 1
-  break_comparison01[,7] <- (break_comparison01[,3]-break_comparison01[,1])== 1
+  break_comparison[,6] <- (break_comparison[,2]-break_comparison[,1])== 1
+  break_comparison[,7] <- (break_comparison[,3]-break_comparison[,1])== 1
   # which are false negative
-  break_comparison01[,8] <- (break_comparison01[,2]-break_comparison01[,1])== -1
-  break_comparison01[,9] <- (break_comparison01[,3]-break_comparison01[,1])== -1
+  break_comparison[,8] <- (break_comparison[,2]-break_comparison[,1])== -1
+  break_comparison[,9] <- (break_comparison[,3]-break_comparison[,1])== -1
   # which tr/fp/fn are in common
-  break_comparison01[,10] <- (break_comparison01[,4]+break_comparison01[,5])== 2
-  break_comparison01[,11] <- (break_comparison01[,6]+break_comparison01[,7])== 2
-  break_comparison01[,12] <- (break_comparison01[,8]+break_comparison01[,9])== 2
+  break_comparison[,10] <- (break_comparison[,4]+break_comparison[,5])== 2
+  break_comparison[,11] <- (break_comparison[,6]+break_comparison[,7])== 2
+  break_comparison[,12] <- (break_comparison[,8]+break_comparison[,9])== 2
   
-  break_comparison01[,13] <- (ifelse(all_breaks01%in%tr_breaks_nbh,1,0)+break_comparison01[,6])== 2
-  break_comparison01[,14] <- (ifelse(all_breaks01%in%tr_breaks_nbh,1,0)+break_comparison01[,7])== 2
+  break_comparison[,13] <- (ifelse(all_breaks01%in%tr_breaks_nbh,1,0)+break_comparison[,6])== 2
+  break_comparison[,14] <- (ifelse(all_breaks01%in%tr_breaks_nbh,1,0)+break_comparison[,7])== 2
   
   all_t3                  <- ifelse(all_breaks01%in%ssvs_breaks_t2,1,0)
-  break_comparison01[,15] <- (all_t3+break_comparison01[,1])== 2  
+  break_comparison[,15] <- (all_t3+break_comparison[,1])== 2  
   
-  return(rss01 = break_comparison01)
-}
+  
+  #=============================================================================
+  # Save Results
+  #=============================================================================
+  
+  folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s/",
+                         conf$gets_lvl, conf$sis_prior)
+  
+  if (!dir.exists(folder_path)) {dir.create(folder_path)}
+  
+  file_name <- sprintf("breaksize-%0.1fSD_rep%0.0f.RDS",conf$rel_effect, conf$number_reps)
+  
+  saveRDS(break_comparison, file = paste0(folder_path,file_name))
+ 
+  #=============================================================================
+  # End of File
+  #=============================================================================
