@@ -1,4 +1,4 @@
-pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50) {
+pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50, cred_int = 0.95) {
   
   data_pip <- mod$draws$omega
   data_steps <- mod$draws$sis
@@ -7,7 +7,7 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50) {
   
   # Parse unit and time from column names
   parsed <- strsplit(col_names, "\\.")
-  units <- sapply(parsed, function(x) x[2]) # rename to make more general?
+  units <- sapply(parsed, function(x) x[2])
   times <- sapply(parsed, function(x) x[3])
   
   times_all <- unique(times)[order(unique(times))] # used for gap check below
@@ -36,20 +36,25 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50) {
     
     # If the unit has fewer times than window length, use all available times
     if (length(sorted_times) < win_size) {
-      # get all availabe date for that window
+      # get all available date for that window
       window_pips <- data_pip[, sorted_indices, drop = FALSE]
       window_steps<- data_steps[, sorted_indices, drop = FALSE]
-      window_sign <- sign(window_steps)
+
       # create window statistics per MCMC sample in all available times
       row_counts_pip <- rowSums(window_pips)
-      row_means_step <- rowMeans(window_steps)
-      # get relative step purity
-      row_rel_sign_cnt <- rowSums(window_sign) / length(window_sign)
+      row_sums_step <- rowSums(window_steps)
+      
+      # get average step purity
+      step_purity <-  sum(sign(colMeans(window_steps)) == sign(mean(row_sums_step))) / 
+        length(window_indices) * sign(mean(row_sums_step))
+      
       # wrap up
       time_range <- paste(min(sorted_times), "-", max(sorted_times))
       unit_results_pip[[time_range]] <- row_counts_pip
-      unit_results_step[[time_range]] <- row_means_step
-      unit_sign_purity[[time_range]] <- row_rel_sign_cnt
+      unit_results_step[[time_range]] <- row_sums_step
+      unit_sign_purity[[time_range]] <- step_purity
+      
+      
     } else {
       # Sliding window approach
       for (i in 1:(length(sorted_times) - win_size + 1)) {
@@ -63,69 +68,56 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50) {
           # get data for this window
           window_pips <- data_pip[, window_indices, drop = FALSE]
           window_steps<- data_steps[, window_indices, drop = FALSE]
-          window_sign <- sign(window_steps)
+          
           # create window statistics per MCMC sample
           row_counts_pip <- rowSums(window_pips)
-          row_means_step <- rowMeans(window_steps)
-          # get relative step purity
-          row_rel_sign_cnt <- rowSums(window_sign) / ncol(window_sign)
+          row_sums_step <- rowSums(window_steps)
+          
+          # get average step purity
+          step_purity <-  sum(sign(colMeans(window_steps)) == sign(mean(row_sums_step))) / 
+            length(window_indices) * sign(mean(row_sums_step))
+
           # wrap up
           time_range <- paste(window_times[1], "-", window_times[length(window_times)])
           unit_results_pip[[time_range]] <- row_counts_pip
-          unit_results_step[[time_range]] <- row_means_step
-          unit_sign_purity[[time_range]] <- row_rel_sign_cnt
+          unit_results_step[[time_range]] <- row_sums_step
+          unit_sign_purity[[time_range]] <- step_purity
         }
       }
     }
     unit_results_pip <- do.call(cbind, unit_results_pip)
     unit_results_step <- do.call(cbind, unit_results_step)
     unit_sign_purity <- do.call(cbind, unit_sign_purity)
-    # unit_sign_purity[is.nan(unit_sign_purity)] <- 0
     
     if(op == ">=") {
-      unit_results_step_cond_on_incl <- sapply(1:ncol(unit_results_step), \(i) {
-        mean(unit_results_step[unit_results_pip[, i] >= 1, i])
-      })
-      unit_sign_purity_cond_on_incl <- sapply(1:ncol(unit_sign_purity), \(i) {
-        mean(unit_sign_purity[unit_results_pip[, i] >= 1, i])
-      })
       unit_results_pip <- colMeans(unit_results_pip >= 1)
     } else if(op == "==") {
-      unit_results_step_cond_on_incl <- sapply(1:ncol(unit_results_step), \(i) {
-        mean(unit_results_step[unit_results_pip[, i] == 1, i])
-      })
-      unit_sign_purity_cond_on_incl <- sapply(1:ncol(unit_sign_purity), \(i) {
-        mean(unit_sign_purity[unit_results_pip[, i] == 1, i])
-      })
       unit_results_pip <- colMeans(unit_results_pip == 1)
     } else {
       print("Only op=c('>=','==') is implemented")
     }
+    
+    unit_results_step_lower <- apply(unit_results_step, 2, quantile, p = (1 - cred_int) / 2) 
+    unit_results_step_upper <- apply(unit_results_step, 2, quantile, p = 1 - (1 - cred_int) / 2) 
     unit_results_step <- colMeans(unit_results_step)
-    unit_sign_purity <- colMeans(unit_sign_purity)
-    
-    
-    names(unit_sign_purity_cond_on_incl) <- 
-      names(unit_results_step_cond_on_incl) <- 
-      names(unit_results_pip)
-    
+
     if(any(unit_results_pip>=pip_threshold)) {
       result[[unit]] <- rbind(
-        pip = unit_results_pip[unit_results_pip >= pip_threshold],
-        step = unit_results_step[unit_results_pip >= pip_threshold],
-        pure = unit_sign_purity[unit_results_pip >= pip_threshold],
-        cond_step = unit_results_step_cond_on_incl[unit_results_pip >= pip_threshold],
-        cond_pure = unit_sign_purity_cond_on_incl[unit_results_pip >= pip_threshold])
+        MAP = unit_results_step[unit_results_pip >= pip_threshold],
+        CI_Lower = unit_results_step_lower[unit_results_pip >= pip_threshold],
+        CI_Upper = unit_results_step_upper[unit_results_pip >= pip_threshold],
+        PIP = unit_results_pip[unit_results_pip >= pip_threshold],
+        purity = unit_sign_purity[unit_results_pip >= pip_threshold])
     }
   }
   
   results_table <- do.call(rbind, lapply(names(result), function(unit) {
     periods <- colnames(result[[unit]])
-    joint_pip <- as.numeric(result[[unit]]["pip",])
-    step <- as.numeric(result[[unit]]["step",])
-    purity <- as.numeric(result[[unit]]["pure",])
-    cond_step <- as.numeric(result[[unit]]["cond_step",])
-    cond_purity <- as.numeric(result[[unit]]["cond_pure",])
+    PIP <- as.numeric(result[[unit]]["PIP",])
+    MAP <- as.numeric(result[[unit]]["MAP",])
+    CI_Lower <- as.numeric(result[[unit]]["CI_Lower",])
+    CI_Upper <- as.numeric(result[[unit]]["CI_Upper",])
+    purity <- as.numeric(result[[unit]]["purity",])
     start_times <- sapply(strsplit(periods, " - "), function(x) x[1])
     end_times <- sapply(strsplit(periods, " - "), function(x) x[2])
     
@@ -134,11 +126,11 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50) {
       period = periods,
       start_time = start_times,
       end_time = end_times,
-      joint_pip = joint_pip,
-      step = step,
+      MAP = MAP,
+      CI_Lower = CI_Lower, 
+      CI_Upper = CI_Upper,
+      PIP = PIP,
       purity = purity,
-      cond_step = cond_step,
-      cond_purity = cond_purity,
       stringsAsFactors = FALSE
     )
   }))

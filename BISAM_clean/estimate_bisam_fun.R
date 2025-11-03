@@ -25,6 +25,7 @@ estimate_bisam <- function(
     step_incl_beta = 1,         # Beta-Bernoulli beta parameter
     step_size_scale = 0.348,    # iMOM/MOM scale parameter relative to sigma^2
     # Additional settings
+    cred_int = 0.95,
     do_split_Z = TRUE,
     do_cluster_s2 = FALSE,
     do_check_outlier = FALSE,
@@ -494,14 +495,14 @@ estimate_bisam <- function(
   estimates <- data.frame(
     MAP = c(beta_hat, gamma_hat, s2_hat),
     CI_Lower = c(
-      apply(b_store, 2, quantile, 0.025),
-      apply(g_store, 2, quantile, 0.025),
-      apply(s2_store, 2, quantile, 0.025)
+      apply(b_store, 2, quantile, (1 - cred_int) / 2),
+      apply(g_store, 2, quantile, (1 - cred_int) / 2),
+      apply(s2_store, 2, quantile, (1 - cred_int) / 2)
     ),
     CI_Upper = c(
-      apply(b_store, 2, quantile, 0.975),
-      apply(g_store, 2, quantile, 0.975),
-      apply(s2_store, 2, quantile, 0.975)
+      apply(b_store, 2, quantile, 1 - (1 - cred_int) / 2),
+      apply(g_store, 2, quantile, 1 - (1 - cred_int) / 2),
+      apply(s2_store, 2, quantile, 1 - (1 - cred_int) / 2)
     ),
     PIP = c(
       rep(NA, ncol(b_store)),
