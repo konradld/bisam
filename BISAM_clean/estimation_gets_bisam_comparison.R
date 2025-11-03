@@ -15,7 +15,7 @@ library(mombf)
 
 # Get SLURM array ID
 run <- commandArgs(trailingOnly = TRUE)
-run_numeric <- as.numeric(run)
+run_numeric <- if (length(run) == 0) 1000 else as.numeric(args)
 
 config <- expand.grid(
   sis_prior = c("mom", "imom"),
@@ -68,7 +68,8 @@ S2_TRUE <- ERROR_SD^2
 # ==============================================================================
 # DATA SIMULATION
 # ==============================================================================
-source("./simulation_code/contr_sim_breaks_fun.R")
+source("./BISAM_clean/contr_sim_breaks_fun.R")
+# source("./simulation_code/contr_sim_breaks_fun.R")
 sim <- contr_sim_breaks(
   n = Ni, 
   t = Nt, 
@@ -193,8 +194,8 @@ if (PRIOR == "imom") {
 # RUN MODEL
 # ==============================================================================
 
-# source("./BISAM_clean/estimate_bisam_fun.R")
-source("./simulation_code/estimate_bisam_fun.R")
+source("./BISAM_clean/estimate_bisam_fun.R")
+# source("./simulation_code/estimate_bisam_fun.R")
 results$b_ssvs_5 <- estimate_bisam(
   data = data,
   do_constant = DO_CONST,
@@ -235,8 +236,11 @@ results$b_ssvs_5 <- estimate_bisam(
 #=============================================================================
 #helper function
 make_sis_names <- function (window_breaks) {
+  win_size <- unique(as.numeric(window_breaks$end_time) -
+           as.numeric(window_breaks$start_time) + 1)
+  if (length(win_size) > 1) stop("incorrect window construction - non uniform window length!")
   paste("sis",
-        window_breaks$unit,
+        rep(window_breaks$unit, each = win_size),
         mapply(
           \(x1, x2) x1:x2,
           as.numeric(window_breaks$start_time),
@@ -252,8 +256,8 @@ tr_breaks     <- rownames(sim$tr.idx)
 tr_breaks_index_matrix <- str_match(tr_breaks, "sis\\.(\\d+)\\.(\\d+)")
 
 ssvs_breaks   <- names(results$b_ssvs_1$coefs$omega[results$b_ssvs_1$coefs$omega > 0.5])
-# source("./BISAM_clean/pip_window_fun.R")
-source("./simulation_code/pip_window_fun.R")
+source("./BISAM_clean/pip_window_fun.R")
+# source("./simulation_code/pip_window_fun.R")
 ssvs_breaks <- pip_window(results$b_ssvs_1, win_size = 1, op = ">=", pip_threshold = 0.50)
 ssvs_breaks <- make_sis_names(ssvs_breaks)
 
@@ -327,7 +331,7 @@ if (!dir.exists(folder_path)) {dir.create(folder_path)}
 
 file_name <- sprintf("breaksize-%0.1fSD_rep%0.0f.RDS",conf$rel_effect, conf$number_reps)
 
-saveRDS(break_comparison, file = paste0(folder_path,file_name))
+# saveRDS(break_comparison, file = paste0(folder_path,file_name))
 
 #=============================================================================
 # End of File
