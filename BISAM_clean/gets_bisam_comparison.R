@@ -1,3 +1,20 @@
+par_iter_fun <- function(
+    Ni=n,
+    Nt=t,
+    NX=nx,
+    DO_OUTLIERS=iis,
+    DO_STEP_SATURATION=sis,
+    DO_CONST=const,
+    DO_INDIV_FE = ife,
+    DO_TIME_FE = tfe,
+    POS_OUTL = pos.outl,
+    POS_STEP = pos.step,
+    OUTL_MEAN=outl.mean,
+    STEP_MEAN_REL=step.mean,
+    ERROR_SD=error.sd,
+    PRIOR = prior_fam,
+){
+  
 # ==============================================================================
 # SETUP AND INITIALIZATION
 # ==============================================================================
@@ -11,39 +28,6 @@ set.seed(192837612)
 # SIMULATION PARAMETERS
 # ==============================================================================
 
-# Prior specification
-PRIOR <- "imom"
-
-# Data dimensions
-Ni <- 10          # number of sim. observations
-Nt <- 30          # number of sim. time periods
-NX <- 0           # number of regressors
-
-# Model structure
-DO_CONST <- TRUE    # inclusion of a constant
-DO_INDIV_FE <- FALSE     # inclusion of indiv. fixed effects
-DO_TIME_FE <- FALSE     # inclusion of time fixed effects
-DO_OUTLIERS <- TRUE      # inclusion of indicator saturation
-DO_STEP_SATURATION <- TRUE      # inclusion of stepshift saturation
-DO_INDICATOR_SATURATION = FALSE
-# Outlier and break parameters
-P_OUTL <- 0.0    # probability of outlier in a Series
-P_STEP <- 0.0    # probability of a stepshift in a Series
-
-# Error distribution
-ERROR_SD <- 10   # standard deviation of the error
-
-# Outlier characteristics
-OUTL_MEAN <- 0   # mean of size of outlier
-OUTL_SD <- 0     # variance of size of outlier
-
-# Stepshift characteristics
-STEP_MEAN_REL <- 2      # relative mean of size of stepshift in error.sd
-STEP_SD <- 0.00         # variance of size of stepshift
-
-# Break positions
-POS_OUTL <- 0
-POS_STEP <- c(41, 108, 169, 196, 221)
 POS_STEP_IN_Z <- POS_STEP - 2 * (POS_STEP %/% Nt + 1) - (POS_STEP %/% Nt)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
 S2_TRUE <- ERROR_SD^2
@@ -124,9 +108,6 @@ sim <- contr_sim_breaks(
   
   # =========================== Bayesian SSVS ==============================.=====
 
-  # ==============================================================================
-  # MODEL ESTIMATION PARAMETERS
-  # ==============================================================================
   data <- sim$data
   
   # Data processing
@@ -139,8 +120,8 @@ sim <- contr_sim_breaks(
   DO_SCALE_X <- FALSE
   
   # MCMC settings
-  NDRAW <- 100L
-  NBURN <- 20L
+  NDRAW <- 10000L
+  NBURN <- 2000L
   
   # Prior settings
   BETA_VARIANCE_SCALE <- 1000
@@ -177,7 +158,6 @@ sim <- contr_sim_breaks(
   } else {
     stop("selected prior not implemented")
   }
-  
   # ==============================================================================
   # RUN MODEL
   # ==============================================================================
@@ -233,42 +213,6 @@ sim <- contr_sim_breaks(
           sep = ".")
   }
   
-  # comparison 0.05----
-  # tr_breaks     <- rownames(sim$tr.idx)
-  # if(iis){
-  #   ssvs_breaks   <- names(colMeans(results$b_ssvs_5)[colMeans(results$b_ssvs_5) > 0.5])
-  # }else{
-  #   ssvs_breaks   <- names(colMeans(results$b_ssvs_5)[colMeans(results$b_ssvs_5) > 0.5])
-  # }
-  # gets_breaks05 <- rownames(results$gets$`0.05`)[grepl("iis.+|sis.+",rownames(results$gets$`0.05`))]
-  # all_breaks05  <- str_sort(unique(c(tr_breaks,ssvs_breaks,gets_breaks05)),numeric = T)
-  # 
-  # break_comparison05 <- matrix(NA,nrow = length(all_breaks05),ncol = 12)
-  # colnames(break_comparison05) <- c("true","ssvs","gets", 
-  #                                   "tr.ssvs","tr.gets",
-  #                                   "fp.ssvs","fp.gets",
-  #                                   "fn.ssvs","fn.gets",
-  #                                   "tr.both","fp.both","fn.both")
-  # rownames(break_comparison05) <- all_breaks05
-  # 
-  # # which are true/found
-  # break_comparison05[,1] <- ifelse(all_breaks05%in%tr_breaks,1,0)
-  # break_comparison05[,2] <- ifelse(all_breaks05%in%ssvs_breaks,1,0)
-  # break_comparison05[,3] <- ifelse(all_breaks05%in%gets_breaks05,1,0)
-  # # which are true positive
-  # break_comparison05[,4] <- (break_comparison05[,2]+break_comparison05[,1])== 2
-  # break_comparison05[,5] <- (break_comparison05[,3]+break_comparison05[,1])== 2
-  # # which are false positive
-  # break_comparison05[,6] <- (break_comparison05[,2]-break_comparison05[,1])== 1
-  # break_comparison05[,7] <- (break_comparison05[,3]-break_comparison05[,1])== 1
-  # # which are false negative
-  # break_comparison05[,8] <- (break_comparison05[,2]-break_comparison05[,1])== -1
-  # break_comparison05[,9] <- (break_comparison05[,3]-break_comparison05[,1])== -1
-  # # which tr/fp/fn are in common
-  # break_comparison05[,10] <- (break_comparison05[,4]+break_comparison05[,5])== 2
-  # break_comparison05[,11] <- (break_comparison05[,6]+break_comparison05[,7])== 2
-  # break_comparison05[,12] <- (break_comparison05[,8]+break_comparison05[,9])== 2
-    
   # comparison 0.01----
   results$b_ssvs_1 <- results$b_ssvs_5 #------------------------------------------ Only when iterating over Tau!!!
   
@@ -334,10 +278,6 @@ sim <- contr_sim_breaks(
   
   all_t3                  <- ifelse(all_breaks01%in%ssvs_breaks_t2,1,0)
   break_comparison01[,15] <- (all_t3+break_comparison01[,1])== 2  
-  
-  # store results
-  # res_sum_store05[[irep]]<-break_comparison05
-  # res_sum_store01[[irep]]<-break_comparison01
   
   return(rss01 = break_comparison01)
 }
