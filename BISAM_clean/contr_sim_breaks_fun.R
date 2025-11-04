@@ -80,7 +80,7 @@ contr_sim_breaks <- function(
   y <- X%*%b + I%*%a + Z%*%g + e
   
   tr.ind <- cbind(which(t(matrix(a,ncol=t,byrow = T))!=0,arr.ind = T),a[a!=0])
-  tr.stp <- cbind(which(t(cbind(rep(0,n),matrix(g,ncol=(t-3),byrow = T)))!=0,arr.ind = T),g[g!=0])
+  tr.stp <- cbind(which(rbind(matrix(rep(0, 2 * n),ncol=n),matrix(g,ncol=n))!=0, arr.ind = T), g[g!=0])
   if(length(tr.ind)!=0){
     rownames(tr.ind) <- paste('iis',tr.ind[,2],tr.ind[,1],sep = '.')
   }
