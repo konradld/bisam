@@ -58,10 +58,10 @@ STEP_MEAN_REL <- conf$rel_effect    # relative mean of size of stepshift in erro
 # Break positions
 POS_OUTL <- 0
 
-# Sample random breaks in the first 4 observations
-POS_STEP_IN_Z <- sapply(1:4, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
-
-POS_STEP <- POS_STEP_IN_Z + 2 * (POS_STEP_IN_Z %/% (Nt - 3) + 1) + POS_STEP_IN_Z %/% (Nt - 3)
+# Sample random breaks in the first N_STEPS observations
+N_STEPS <- 4
+POS_STEP_IN_Z <- sapply(1:N_STEPS, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
+POS_STEP <- POS_STEP_IN_Z + 2 * (1:N_STEPS) + ((1:N_STEPS) - 1)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
 S2_TRUE <- ERROR_SD^2
 
