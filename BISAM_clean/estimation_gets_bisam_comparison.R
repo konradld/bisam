@@ -15,7 +15,7 @@ library(mombf)
 
 # Get SLURM array ID
 run <- commandArgs(trailingOnly = TRUE)
-run_numeric <- if (length(run) == 0) 1000 else as.numeric(args)
+run_numeric <- if (length(run) == 0) 1000 else as.numeric(run)
 
 config <- expand.grid(
   sis_prior = c("mom", "imom"),
