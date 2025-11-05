@@ -10,7 +10,7 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50, cre
   units <- sapply(parsed, function(x) x[2])
   times <- sapply(parsed, function(x) x[3])
   
-  times_all <- unique(times)[order(unique(times))] # used for gap check below
+  times_all <- stringr::str_sort(unique(times), numeric = TRUE)
   
   # Get unique units
   unique_units <- unique(units)
@@ -25,7 +25,7 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50, cre
     unit_times <- times[unit_indices]
     
     # Sort by time
-    time_order <- order(as.numeric(unit_times))
+    time_order <- stringr::str_order(unit_times, numeric = TRUE)
     sorted_indices <- unit_indices[time_order]
     sorted_times <- unit_times[time_order]
     
@@ -150,10 +150,10 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = 0.50, cre
   t_admissible <- length(times_all)
   
   # Calculate overall plot index for balanced panel
-  if(length(results_table$unit_idx > 0)) {
-    results_table <- results_table[order(results_table$unit_idx, results_table$start_time), ]
-  }
   results_table$position_idx <- (results_table$unit_idx - 1) * t_admissible + results_table$time_idx
+  if(length(results_table$unit_idx > 0)) {
+    results_table <- results_table[order(results_table$position_idx), ]
+  }
   
   return(results_table)
 }
