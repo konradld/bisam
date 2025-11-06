@@ -15,7 +15,7 @@ library(mombf)
 
 # Get SLURM array ID
 run <- commandArgs(trailingOnly = TRUE)
-run_numeric <- if (length(run) == 0) 1000 else as.numeric(run)
+run_numeric <- if (length(run) == 0) 1001 else as.numeric(run)
 
 config <- expand.grid(
   sis_prior = c("mom", "imom"),
@@ -151,8 +151,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 10000L
-NBURN <- 2000L
+NDRAW <- 100L
+NBURN <- 20L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 100
@@ -264,7 +264,7 @@ ssvs_breaks <- make_sis_names(ssvs_breaks)
 ssvs_breaks_t2 <- pip_window(results$b_ssvs_1, win_size = 2, op = ">=", pip_threshold = 0.75)
 ssvs_breaks_t2 <- make_sis_names(ssvs_breaks_t2)
 
-gets_breaks01 <- rownames(results$gets$`0.01`)[grepl("iis.+|sis.+",rownames(results$gets[[1]]))]
+gets_breaks01 <- rownames(results$gets[[1]])[grepl("iis.+|sis.+",rownames(results$gets[[1]]))]
 all_breaks01  <- str_sort(unique(c(tr_breaks,ssvs_breaks,gets_breaks01,ssvs_breaks_t2)),numeric = T)
 
 #check immediate neighbourhood
