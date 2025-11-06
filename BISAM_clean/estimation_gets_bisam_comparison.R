@@ -255,7 +255,6 @@ results$b_ssvs_1 <- results$b_ssvs_5 #------------------------------------------
 tr_breaks     <- rownames(sim$tr.idx)
 tr_breaks_index_matrix <- str_match(tr_breaks, "sis\\.(\\d+)\\.(\\d+)")
 
-ssvs_breaks   <- names(results$b_ssvs_1$coefs$omega[results$b_ssvs_1$coefs$omega > 0.5])
 source("./BISAM_clean/pip_window_fun.R")
 # source("./simulation_code/pip_window_fun.R")
 ssvs_breaks <- pip_window(results$b_ssvs_1, win_size = 1, op = ">=", pip_threshold = 0.50)
