@@ -362,7 +362,7 @@ estimate_bisam <- function(
     } else if (beta_prior == "f_indep_var") {
       BN <- Matrix::solve(beta_var_inv + XX)
       bN <- BN %*% (crossprod(X, y_tmp) + beta_var_inv %*% beta_mean)
-      BN <- BN * s2_i
+      # BN <- BN * s2_i
     } else {
       stop("For 'beta' only g-prior and fractional-prior is implemented!")
     }
