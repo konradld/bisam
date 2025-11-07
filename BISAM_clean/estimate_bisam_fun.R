@@ -347,7 +347,7 @@ estimate_bisam <- function(
     # ==========================================================================
     # DRAW p(beta | sigma^2, gamma, y)
     # ==========================================================================
-    if (any(beta_prior %in% c("g","f","flasso","f_indep_var"))) {
+    if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso") {
       if (do_cluster_s2) {
         XtSX <- crossprod(X / s2_i, X)
         beta_var_inv <- XtSX / beta_variance_scale
