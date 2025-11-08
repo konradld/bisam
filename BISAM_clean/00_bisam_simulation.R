@@ -124,8 +124,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 1000L
-NBURN <- 200L
+NDRAW <- 10000L
+NBURN <- 2000L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 1000
@@ -139,7 +139,7 @@ STEP_INCL_ALPHA <- 1
 STEP_INCL_BETA <- 1
 
 # Prior specifications
-BETA_PRIOR <- "f"
+BETA_PRIOR <- "f_indep"
 STEP_SIZE_PRIOR <- PRIOR
 STEP_INCL_PRIOR <- "bern"
 
