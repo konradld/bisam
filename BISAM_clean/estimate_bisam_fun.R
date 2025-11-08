@@ -175,13 +175,13 @@ estimate_bisam <- function(
   if (beta_prior == "g" || beta_prior == "hs") {
     beta_mean <- numeric(p)
   }
-  if (beta_prior == "f" || beta_prior == "f_indep_var") {
+  if (beta_prior == "f" || beta_prior == "f_indep") {
     if (exists("mod_prior") & !do_cluster_s2) { 
       beta_mean <- mod_prior$coefficients
     } else {
       beta_mean <- lm.fit(as.matrix(X), y)$coefficients
     }
-    if (beta_prior == "f_indep_var") {
+    if (beta_prior == "f_indep") {
       D <- if (do_sparse_computation) Diagonal(p) else diag(p)
       beta_var <- D * beta_variance_scale
       beta_var_inv <- D / beta_variance_scale
@@ -347,22 +347,32 @@ estimate_bisam <- function(
     # ==========================================================================
     # DRAW p(beta | sigma^2, gamma, y)
     # ==========================================================================
-    if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso") {
+    if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso" || beta_prior == "f_indep") {
       if (do_cluster_s2) {
-        XtSX <- crossprod(X / s2_i, X)
-        beta_var_inv <- XtSX / beta_variance_scale
+        XtS <- X / s2_i
+        XtSX <- crossprod(XtS, X)
+        XtSy <- crossprod(XtS, y_tmp)
         
-        BN <- Matrix::solve(crossprod(X * (1 / s2_i + 1 / (beta_variance_scale * s2_i)), X))
-        bN <- BN %*% (crossprod(X / s2_i, y_tmp) + beta_var_inv %*% beta_mean)
+        if (beta_prior == "f_indep") {
+          BN <- Matrix::solve(beta_var_inv + XtSX)
+        } else {
+          beta_var_inv <- XtSX / beta_variance_scale
+          BN <- Matrix::solve(crossprod(X * (1 / s2_i + 1 / (beta_variance_scale * s2_i)), X))
+        }
+        bN <- BN %*% (XtSy + beta_var_inv %*% beta_mean)
       } else {
-        BN <- s2_i_unique * beta_variance_scale / (1 + beta_variance_scale) * XX_inv
-        bN <- 1 / (1 + beta_variance_scale) * 
-          (beta_variance_scale * XX_inv %*% crossprod(X, y_tmp) + beta_mean)
+        if (beta_prior == "f_indep") {
+          XtSX <- XX / s2_i_unique
+          XtSy <- crossprod(X, y_temp) / s2_i_unique
+          
+          BN <- Matrix::solve(beta_var_inv + XtSX)
+          bN <- BN %*% (XtSy + beta_var_inv %*% beta_mean)
+        } else {
+          BN <- s2_i_unique * beta_variance_scale / (1 + beta_variance_scale) * XX_inv
+          bN <- 1 / (1 + beta_variance_scale) * 
+            (beta_variance_scale * XX_inv %*% crossprod(X, y_tmp) + beta_mean)
+        }
       }
-    } else if (beta_prior == "f_indep_var") {
-      BN <- Matrix::solve(beta_var_inv + XX)
-      bN <- BN %*% (crossprod(X, y_tmp) + beta_var_inv %*% beta_mean)
-      # BN <- BN * s2_i
     } else {
       stop("For 'beta' only g-prior and fractional-prior is implemented!")
     }
