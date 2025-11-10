@@ -289,7 +289,7 @@ estimate_bisam <- function(
   } else {
     batch <- matrix(1:r, ncol = r)
   }
-  obs_with_steps <- ceiling(steps_to_check / (t - 3))
+  obs_with_steps <- unique(ceiling(steps_to_check / (t - 3)))
   
   # ============================================================================
   # GIBBS SAMPLER
