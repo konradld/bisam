@@ -20,9 +20,9 @@ Nt <- 30          # number of sim. time periods
 NX <- 0           # number of regressors
 
 # Model structure
-DO_CONST <- TRUE    # inclusion of a constant
-DO_INDIV_FE <- FALSE     # inclusion of indiv. fixed effects
-DO_TIME_FE <- FALSE     # inclusion of time fixed effects
+DO_CONST <- FALSE    # inclusion of a constant
+DO_INDIV_FE <- TRUE     # inclusion of indiv. fixed effects
+DO_TIME_FE <- TRUE     # inclusion of time fixed effects
 DO_OUTLIERS <- TRUE      # inclusion of indicator saturation
 DO_STEP_SATURATION <- TRUE      # inclusion of stepshift saturation
 
@@ -44,6 +44,7 @@ STEP_SD <- 0.00         # variance of size of stepshift
 # Break positions
 POS_OUTL <- 0
 POS_STEP <- c(41, 108, 169, 196, 221)
+
 POS_STEP_IN_Z <- POS_STEP - 2 * (POS_STEP %/% Nt + 1) - (POS_STEP %/% Nt)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
 S2_TRUE <- ERROR_SD^2
@@ -139,7 +140,7 @@ STEP_INCL_ALPHA <- 1
 STEP_INCL_BETA <- 1
 
 # Prior specifications
-BETA_PRIOR <- "f_indep"
+BETA_PRIOR <- "f"
 STEP_SIZE_PRIOR <- PRIOR
 STEP_INCL_PRIOR <- "bern"
 
@@ -231,6 +232,9 @@ mod <- estimate_bisam(
   do_sparse_computation = DO_SPARSE_COMPUTATION,
   do_geweke_test = DO_GEWEKE_TEST
 )
+
+STEPS_TO_CHECK <- POS_STEP_IN_Z
+steps_to_check = STEPS_TO_CHECK
 
 # ==============================================================================
 # PLOTTING
