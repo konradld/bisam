@@ -289,6 +289,7 @@ estimate_bisam <- function(
   } else {
     batch <- matrix(1:r, ncol = r)
   }
+  obs_with_steps <- ceiling(steps_to_check / (t - 3))
   
   # ============================================================================
   # GIBBS SAMPLER
@@ -393,7 +394,7 @@ estimate_bisam <- function(
     y_tmp_sd <- y_tmp / sqrt_s2_i
     s2_i_tmp <- 1
     
-    for (j in 1:n) {
+    for (j in obs_with_steps) {
 
       p_idx_full <- batch[j, ]
       p_idx <- p_idx_full[p_idx_full %in% steps_to_check]
