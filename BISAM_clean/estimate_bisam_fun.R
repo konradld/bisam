@@ -392,7 +392,7 @@ estimate_bisam <- function(
     
     # Standardize for model selection
     y_tmp_sd <- y_tmp / sqrt_s2_i
-    s2_i_tmp <- 1
+    s2_i_tmp <- if(do_cluster_s2) s2_i_unique else rep(s2_i_unique,n)
     
     for (j in obs_with_steps) {
 
@@ -436,7 +436,7 @@ estimate_bisam <- function(
         family = "normal",
         priorCoef = sis_prior_f,
         priorDelta = incl_prior_f,
-        phi = s2_i_tmp,
+        phi = 1,
         deltaini = w_i[p_idx_rand],
         initSearch = 'none',
         method = 'ALA',
@@ -472,7 +472,7 @@ estimate_bisam <- function(
           niter = ngburn + ngdraw,
           burnin = ngburn,
           knownphi = TRUE,
-          phi = s2_i_unique[j],
+          phi = s2_i_tmp[j],
           use_thinit = TRUE,
           thinit = g_incl_i[p_idx_full][colsel]
         )
