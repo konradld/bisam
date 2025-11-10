@@ -32,6 +32,7 @@ estimate_bisam <- function(
     outlier_incl_alpha = 1,     # P(outlier) ~ Beta(outlier_incl_alpha, outlier_incl_beta)
     outlier_incl_beta = 10,     # P(outlier) ~ Beta(outlier_incl_alpha, outlier_incl_beta)
     outlier_scale = 10,
+    steps_to_check = "all",
     do_sparse_computation = FALSE,
     do_geweke_test = FALSE
 ) {
@@ -143,6 +144,7 @@ estimate_bisam <- function(
   
   r <- ncol(Z)
   
+  if(steps_to_check[1] == "all") {steps_to_check <- 1:r}
   # ============================================================================
   # PRIOR SPECIFICATION
   # ============================================================================
@@ -393,7 +395,8 @@ estimate_bisam <- function(
     
     for (j in 1:n) {
 
-      p_idx <- batch[j, ]
+      p_idx_full <- batch[j, ]
+      p_idx <- p_idx_full[p_idx_full %in% steps_to_check]
       p_idx_rand <- p_idx  # Keep order intact (can be randomized: sample(p_idx))
       
       if (do_split_Z) {
@@ -419,7 +422,7 @@ estimate_bisam <- function(
       # Model selection using mombf
       w_i_mod <- mombf::modelSelection(
         y = y_tmp_sd[n_idx],
-        x = Z[n_idx, p_idx_rand],
+        x = Z[n_idx, p_idx_rand, drop = FALSE],
         groups = 1:length(p_idx),
         nknots = 9,
         center = FALSE,
@@ -442,7 +445,7 @@ estimate_bisam <- function(
         optimMethod = "auto",
         optim_maxit = 10,
         B = 10^5,
-        priorVar = igprior(sigma2_shape[j], sigma2_rate[j]),
+        priorVar = var_prior_f,
         priorSkew = momprior(tau = step_size_scale),
         XtXprecomp = TRUE,
         verbose = FALSE
@@ -456,11 +459,11 @@ estimate_bisam <- function(
       # ========================================================================
       if (any(w_i[p_idx_rand])) {
         g_draw <- matrix(0, nrow = ngdraw, ncol = t - 2)
-        colsel <- which(w_i_mod$postSample == 1)
+        colsel <- which(w_i[p_idx_full] == TRUE)
         
-        g_draw[1, c(colsel, t - 2)] <- rnlp_new(
+        g_draw[1, c(colsel, t - 2)] <- rnlp_new( # the t-2 is for the sigma^2 that is thrown away if sigma is known
           y = y_tmp[n_idx],
-          x = w_i_mod$xstd[, colsel, drop = FALSE],
+          x = z[, colsel, drop = FALSE],
           priorCoef = w_i_mod$priors$priorCoef,
           priorGroup = w_i_mod$priors$priorGroup,
           priorVar = w_i_mod$priors$priorVar,
@@ -468,15 +471,15 @@ estimate_bisam <- function(
           niter = ngburn + ngdraw,
           burnin = ngburn,
           knownphi = TRUE,
-          phi = s2_i_unique,
+          phi = s2_i_unique[j],
           use_thinit = TRUE,
-          thinit = g_incl_i[p_idx][colsel]
+          thinit = g_incl_i[p_idx_full][colsel]
         )
         g_incl_i[p_idx][w_i[p_idx]] <- g_draw[colsel]
       } else {
         g_draw <- matrix(0, nrow = ngdraw, ncol = t - 2)
       }
-      g_i[p_idx_rand] <- g_draw[-(t - 2)]  # Remove phi estimate
+      g_i[p_idx_full] <- g_draw[-(t - 2)]  # Remove phi estimate
     }
     
     Zg_i <- Z[, w_i, drop = FALSE] %*% g_i[w_i]
