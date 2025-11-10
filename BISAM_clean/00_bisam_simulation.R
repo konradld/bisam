@@ -20,9 +20,9 @@ Nt <- 30          # number of sim. time periods
 NX <- 0           # number of regressors
 
 # Model structure
-DO_CONST <- FALSE    # inclusion of a constant
-DO_INDIV_FE <- TRUE     # inclusion of indiv. fixed effects
-DO_TIME_FE <- TRUE     # inclusion of time fixed effects
+DO_CONST <- TRUE    # inclusion of a constant
+DO_INDIV_FE <- FALSE     # inclusion of indiv. fixed effects
+DO_TIME_FE <- FALSE     # inclusion of time fixed effects
 DO_OUTLIERS <- TRUE      # inclusion of indicator saturation
 DO_STEP_SATURATION <- TRUE      # inclusion of stepshift saturation
 
@@ -125,8 +125,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 10000L
-NBURN <- 2000L
+NDRAW <- 2000L
+NBURN <- 500L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 1000
@@ -233,7 +233,7 @@ mod <- estimate_bisam(
   do_geweke_test = DO_GEWEKE_TEST
 )
 
-STEPS_TO_CHECK <- POS_STEP_IN_Z
+STEPS_TO_CHECK <- c(1:length(mod$coefs$omega))[mod$coefs$omega > quantile(mod$coefs$omega, 0.8)]
 steps_to_check = STEPS_TO_CHECK
 
 # ==============================================================================
