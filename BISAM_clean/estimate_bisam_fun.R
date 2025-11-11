@@ -179,11 +179,14 @@ estimate_bisam <- function(
     beta_mean <- numeric(p)
   }
   if (beta_prior == "f" || beta_prior == "f_indep") {
-    if (exists("mod_prior") & !do_cluster_s2) { 
-      beta_mean <- mod_prior$coefficients
-    } else {
-      beta_mean <- lm.fit(X, y)$coefficients
+    if (!exists("mod_prior")) { 
+      mod_prior <- lm.fit(X, y)
     }
+    res2 <- mod_prior$residuals^2
+    Q3 <- quantile(res2, 0.90)
+    select_i <- res2 < Q3
+    beta_mean <- lm.fit(X[select_i,], y[select_i,])$coefficients
+    
     if (beta_prior == "f_indep") {
       D <- if (do_sparse_computation) Diagonal(p) else diag(p)
       beta_var <- D * beta_variance_scale
