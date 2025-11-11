@@ -152,27 +152,28 @@ estimate_bisam <- function(
   # --- Sigma^2 Prior ---
   if (is.null(sigma2_shape) | is.null(sigma2_rate)) {
     print("Sigma^2 prior is inadmissable. Using default spec. based on OLS")
+    mod_prior <- lm.fit(X, y)
     if (do_cluster_s2) {
       sigma2_shape <- sigma2_rate <- numeric(n)
       for (i in 1:n) {
         n_idx <- N_idx[i,]
-        X_tmp <- X[n_idx, , drop = FALSE]
-        X_tmp <- X_tmp[, colSums(X_tmp != 0) > 1, drop = FALSE] # >1 to drop TFE
-        mod_prior <- lm.fit(as.matrix(X_tmp), y[n_idx])
-        s2_OLS <- sum(mod_prior$residuals^2) / mod_prior$df.residual
+        res2 <- mod_prior$residuals[n_idx]^2
+        Q3 <- quantile(res2, 0.90)
+        s2_OLS <- sum(res2[res2 < Q3]) / (sum(res2 < Q3) - p / n * 0.9) # p / n is the realtive share of coefs per unit
         s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = sigma2_hyper_p)
         sigma2_shape[i] <- s2_pars$shape
         sigma2_rate[i] <- s2_pars$rate
       }
     } else {
-      mod_prior <- lm.fit(as.matrix(X), y)
-      s2_OLS <- sum(mod_prior$residuals^2) / mod_prior$df.residual
-      s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = 0.9)
+      res2 <- mod_prior$residuals^2
+      Q3 <- quantile(res2, 0.90)
+      s2_OLS <- sum(res2[res2 < Q3]) / (sum(res2 < Q3) - p * 0.9) # p * 0.9 to correct for outlier exclusion
+      s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = sigma2_hyper_p)
       sigma2_shape <- s2_pars$shape
       sigma2_rate <- s2_pars$rate
     }
   }
-  
+
   # --- Beta Prior ---
   if (beta_prior == "g" || beta_prior == "hs") {
     beta_mean <- numeric(p)
@@ -181,7 +182,7 @@ estimate_bisam <- function(
     if (exists("mod_prior") & !do_cluster_s2) { 
       beta_mean <- mod_prior$coefficients
     } else {
-      beta_mean <- lm.fit(as.matrix(X), y)$coefficients
+      beta_mean <- lm.fit(X, y)$coefficients
     }
     if (beta_prior == "f_indep") {
       D <- if (do_sparse_computation) Diagonal(p) else diag(p)
