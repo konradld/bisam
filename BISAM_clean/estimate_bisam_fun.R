@@ -158,16 +158,16 @@ estimate_bisam <- function(
       for (i in 1:n) {
         n_idx <- N_idx[i,]
         res2 <- mod_prior$residuals[n_idx]^2
-        Q3 <- quantile(res2, 0.90)
-        s2_OLS <- sum(res2[res2 < Q3]) / (sum(res2 < Q3) - p / n * 0.9) # p / n is the realtive share of coefs per unit
+        Qtop <- quantile(res2, 0.90)
+        s2_OLS <- sum(res2[res2 < Qtop]) / (sum(res2 < Qtop) - p / n * 0.9) # p / n is the realtive share of coefs per unit
         s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = sigma2_hyper_p)
         sigma2_shape[i] <- s2_pars$shape
         sigma2_rate[i] <- s2_pars$rate
       }
     } else {
       res2 <- mod_prior$residuals^2
-      Q3 <- quantile(res2, 0.90)
-      s2_OLS <- sum(res2[res2 < Q3]) / (sum(res2 < Q3) - p * 0.9) # p * 0.9 to correct for outlier exclusion
+      Qtop <- quantile(res2, 0.90)
+      s2_OLS <- sum(res2[res2 < Qtop]) / (sum(res2 < Qtop) - p * 0.9) # p * 0.9 to correct for outlier exclusion
       s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = sigma2_hyper_p)
       sigma2_shape <- s2_pars$shape
       sigma2_rate <- s2_pars$rate
@@ -183,8 +183,10 @@ estimate_bisam <- function(
       mod_prior <- lm.fit(X, y)
     }
     res2 <- mod_prior$residuals^2
-    Q3 <- quantile(res2, 0.90)
-    select_i <- res2 < Q3
+    select_i <- c(sapply(1:n, \(i) {
+      idx <- (i-1)*t + (1:t)
+      idx[res2[idx] < quantile(res2[idx], 0.90)]
+    }))
     beta_mean <- lm.fit(X[select_i,], y[select_i,])$coefficients
     
     if (beta_prior == "f_indep") {
