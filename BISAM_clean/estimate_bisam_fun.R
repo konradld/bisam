@@ -185,7 +185,7 @@ estimate_bisam <- function(
     res2 <- mod_prior$residuals^2
     Q3 <- quantile(res2, 0.90)
     select_i <- res2 < Q3
-    beta_mean <- lm.fit(X[select_i,], y[select_i,])$coefficients
+    beta_mean <- lm.fit(X[select_i,, drop = FALSE], y[select_i,])$coefficients
     
     if (beta_prior == "f_indep") {
       D <- if (do_sparse_computation) Diagonal(p) else diag(p)
