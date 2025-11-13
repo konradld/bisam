@@ -363,10 +363,10 @@ estimate_bisam <- function(
         XtSy <- crossprod(XtS, y_tmp)
         
         if (beta_prior == "f_indep") {
-          BN <- Matrix::solve(beta_var_inv + XtSX)
+          BN <- safe_invert(beta_var_inv + XtSX, do_sparse_computation)
         } else {
           beta_var_inv <- XtSX / beta_variance_scale
-          BN <- Matrix::solve(crossprod(X * (1 / s2_i + 1 / (beta_variance_scale * s2_i)), X))
+          BN <- safe_invert(crossprod(X * (1 / s2_i + 1 / (beta_variance_scale * s2_i)), X), do_sparse_computation)
         }
         bN <- BN %*% (XtSy + beta_var_inv %*% beta_mean)
       } else {
@@ -374,7 +374,7 @@ estimate_bisam <- function(
           XtSX <- XX / s2_i_unique
           XtSy <- crossprod(X, y_temp) / s2_i_unique
           
-          BN <- Matrix::solve(beta_var_inv + XtSX)
+          BN <- safe_invert(beta_var_inv + XtSX, do_sparse_computation)
           bN <- BN %*% (XtSy + beta_var_inv %*% beta_mean)
         } else {
           BN <- s2_i_unique * beta_variance_scale / (1 + beta_variance_scale) * XX_inv
@@ -639,4 +639,29 @@ inv_gamma_params_dual <- function(x1, p1, x2, p2) {
   )
   
   return(list(shape = result$x[1], scale = result$x[2]))
+}
+
+#===============================================================================
+#
+#                  Helper Funcions for inverting BN
+#
+#===============================================================================
+safe_invert <- function(m, do_sparse_computation = TRUE) {
+  # Convert to dense if requested
+  if (!do_sparse_computation && inherits(m, "sparseMatrix")) {
+    m <- as.matrix(m)
+  }
+  
+  tryCatch(Matrix::solve(m), error = function(e) {
+    tryCatch({
+      if (do_sparse_computation && inherits(m, "sparseMatrix")) {
+        chol2inv(chol(as(m, "symmetricMatrix")))
+      } else {
+        chol2inv(chol(as.matrix(m)))
+      }
+    }, error = function(e2) {
+      warning("Falling back to nearPD", if (!do_sparse_computation || !inherits(m, "sparseMatrix")) " (dense computation)" else " (losing sparsity)")
+      Matrix::solve(nearPD(if (do_sparse_computation) m else as.matrix(m), corr = FALSE, keepDiag = TRUE)$mat)
+    })
+  })
 }
