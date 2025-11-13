@@ -18,7 +18,7 @@ rm(list = ls())
 library(dplyr)
 
 # Set up paths
-data_path <- "./Simulations/gets_bisam_comparison_gets-0.05_bisam_prior-imom/"
+data_path <- "./Simulations/2025-11-06/gets_bisam_comparison_gets-0.05_bisam_prior-imom/"
 
 # Get list of all RDS files in the folder
 file_list <- list.files(
@@ -65,7 +65,7 @@ summary_table <- sapply(breaksize_vals, function(bs) {
   
   # Sum across all replicates
   summary_stats <- data_subset |>
-    select(-row_name, -breaksize, -replicate) |> 
+    dplyr::select(-row_name, -breaksize, -replicate) |> 
     colSums()
   
   return(summary_stats)
