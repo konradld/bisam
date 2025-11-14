@@ -152,7 +152,13 @@ estimate_bisam <- function(
   # --- Sigma^2 Prior ---
   if (is.null(sigma2_shape) | is.null(sigma2_rate)) {
     print("Sigma^2 prior is inadmissable. Using default spec. based on OLS")
-    mod_prior <- lm.fit(X, y)
+    if(do_sparse_computation) {
+      mod_prior <- list()
+      mod_prior$coefficients <- MatrixModels:::lm.fit.sparse(X, y)
+      mod_prior$residuals <- as.vector(y - X %*% mod_prior$coefficients)
+    } else {
+      mod_prior <- lm.fit(X, y)
+    }
     if (do_cluster_s2) {
       sigma2_shape <- sigma2_rate <- numeric(n)
       for (i in 1:n) {
@@ -173,21 +179,31 @@ estimate_bisam <- function(
       sigma2_rate <- s2_pars$rate
     }
   }
-
+  
   # --- Beta Prior ---
   if (beta_prior == "g" || beta_prior == "hs") {
     beta_mean <- numeric(p)
   }
   if (beta_prior == "f" || beta_prior == "f_indep") {
-    if (!exists("mod_prior")) { 
-      mod_prior <- lm.fit(X, y)
+    if (!exists("mod_prior")) {
+      if(do_sparse_computation) {
+        mod_prior <- list()
+        mod_prior$coefficients <- MatrixModels:::lm.fit.sparse(X, y)
+        mod_prior$residuals <- as.vector(y - X %*% mod_prior$coefficients)
+      } else {
+        mod_prior <- lm.fit(X, y)
+      }
     }
     res2 <- mod_prior$residuals^2
     select_i <- c(sapply(1:n, \(i) {
       idx <- (i-1)*t + (1:t)
       idx[res2[idx] < quantile(res2[idx], 0.90)]
     }))
-    beta_mean <- lm.fit(X[select_i,, drop = FALSE], y[select_i,])$coefficients
+    if(do_sparse_computation) {
+      beta_mean <- MatrixModels:::lm.fit.sparse(X[select_i,, drop = FALSE], y[select_i,])
+    } else {
+      beta_mean <- lm.fit(X[select_i,, drop = FALSE], y[select_i,])$coefficients
+    }
     
     if (beta_prior == "f_indep") {
       D <- if (do_sparse_computation) Diagonal(p) else diag(p)
@@ -315,7 +331,7 @@ estimate_bisam <- function(
       # DRAW p(omikron | kappa, beta, gamma, sigma, y)
       # ========================================================================
       residuals <- as.vector(y - Xb_i - Zg_i)
-
+      
       # Compute log probabilities for outlier models
       log_p0 <- dnorm(residuals, 0, sqrt_s2_i, log = TRUE) + log(1 - k_i)
       log_p1 <- dnorm(residuals, 0, sqrt_outlier_scale * sqrt_s2_i, log = TRUE) + log(k_i)
@@ -401,7 +417,7 @@ estimate_bisam <- function(
     s2_i_tmp <- if(do_cluster_s2) s2_i_unique else rep(s2_i_unique,n)
     
     for (j in obs_with_steps) {
-
+      
       p_idx_full <- batch[j, ]
       p_idx <- p_idx_full[p_idx_full %in% steps_to_check]
       p_idx_rand <- p_idx  # Keep order intact (can be randomized: sample(p_idx))
