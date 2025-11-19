@@ -9,7 +9,7 @@ rm(list = ls())
 
 # Get SLURM array ID
 run <- commandArgs(trailingOnly = TRUE)
-run_numeric <- if (length(run) == 0) 1000 else as.numeric(run)
+run_numeric <- if (length(run) == 0) 1 else as.numeric(run)
 
 if(length(run) != 0) {
   .libPaths("~/R_LIBS")
@@ -22,12 +22,12 @@ library(Matrix)
 library(mombf)
 
 config <- expand.grid(
-  sis_prior = c("imom", "mom"),
+  sis_prior = c("imom"),
   gets_lvl = c(0.05,0.01),
   rel_effect = c(1, 1.5, 2, 3, 6, 10),
-  tau = c(1, "auto"),
-  number_reps = 1:64,
-  date = "2025-11-11",
+  tau = c(4, "auto"),
+  number_reps = 1:100,
+  date = "2025-11-18_sparse",
   stringsAsFactors = FALSE
 )
 conf <- config[run_numeric,]
@@ -65,9 +65,9 @@ STEP_MEAN_REL <- conf$rel_effect    # relative mean of size of stepshift in erro
 POS_OUTL <- 0
 
 # Sample random breaks in the first N_STEPS observations
-N_STEPS <- 4
-POS_STEP_IN_Z <- sapply(1:N_STEPS, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
-POS_STEP <- POS_STEP_IN_Z + 2 * (1:N_STEPS) + ((1:N_STEPS) - 1)
+N_STEPS <- c(1:4)
+POS_STEP_IN_Z <- sapply(N_STEPS, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
+POS_STEP <- POS_STEP_IN_Z + 2 * (N_STEPS) + ((N_STEPS) - 1)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
 S2_TRUE <- ERROR_SD^2
 
@@ -192,7 +192,7 @@ if(conf$tau == "auto") {
   if (PRIOR == "imom") {
     TAU <- priorp2g(1/12, STEP_MEAN_REL, nu = 1, prior = "iMom")
   } else if (PRIOR == "mom") {
-    TAU <- priorp2g(1/12, STEP_MEAN_REL, nu = 1, prior = "normalMom")
+    TAU <- STEP_MEAN_REL^2 / 2
   } else {
     stop("selected prior not implemented")
   }
@@ -206,7 +206,7 @@ if(conf$tau == "auto") {
 # ==============================================================================
 # source("./BISAM_clean/estimate_bisam_fun.R")
 source("../code/estimate_bisam_fun.R")
-results$b_ssvs_5 <- estimate_bisam(
+results$b_ssvs <- estimate_bisam(
   data = data,
   do_constant = DO_CONST,
   do_individual_fe = DO_INDIV_FE,
@@ -247,7 +247,7 @@ results$b_ssvs_5 <- estimate_bisam(
 #helper function
 make_sis_names <- function (window_breaks) {
   win_size <- unique(as.numeric(window_breaks$end_time) -
-           as.numeric(window_breaks$start_time) + 1)
+                       as.numeric(window_breaks$start_time) + 1)
   if (length(win_size) > 1) stop("incorrect window construction - non uniform window length!")
   paste("sis",
         rep(window_breaks$unit, each = win_size),
@@ -259,23 +259,22 @@ make_sis_names <- function (window_breaks) {
         sep = ".")
 }
 
-# comparison 0.01----
-results$b_ssvs_1 <- results$b_ssvs_5 #------------------------------------------ Only when iterating over Tau!!!
+# comparison ----
 
 tr_breaks     <- rownames(sim$tr.idx)
 tr_breaks_index_matrix <- str_match(tr_breaks, "sis\\.(\\d+)\\.(\\d+)")
 
-ssvs_breaks   <- names(results$b_ssvs_1$coefs$omega[results$b_ssvs_1$coefs$omega > 0.5])
+ssvs_breaks   <- names(results$b_ssvs$coefs$omega[results$b_ssvs$coefs$omega > 0.5])
 # source("./BISAM_clean/pip_window_fun.R")
 source("../code/pip_window_fun.R")
-ssvs_breaks <- pip_window(results$b_ssvs_1, win_size = 1, op = ">=", pip_threshold = 0.50)
+ssvs_breaks <- pip_window(results$b_ssvs, win_size = 1, op = ">=", pip_threshold = 0.50)
 ssvs_breaks <- make_sis_names(ssvs_breaks)
 
-ssvs_breaks_t2 <- pip_window(results$b_ssvs_1, win_size = 2, op = ">=", pip_threshold = 0.75)
+ssvs_breaks_t2 <- pip_window(results$b_ssvs, win_size = 2, op = ">=", pip_threshold = 0.75)
 ssvs_breaks_t2 <- make_sis_names(ssvs_breaks_t2)
 
-gets_breaks01 <- rownames(results$gets$`0.01`)[grepl("iis.+|sis.+",rownames(results$gets[[1]]))]
-all_breaks01  <- str_sort(unique(c(tr_breaks,ssvs_breaks,gets_breaks01,ssvs_breaks_t2)),numeric = T)
+gets_breaks <- rownames(results$gets[[1]])[grepl("iis.+|sis.+",rownames(results$gets[[1]]))]
+all_breaks  <- str_sort(unique(c(tr_breaks,ssvs_breaks,gets_breaks,ssvs_breaks_t2)),numeric = T)
 
 #check immediate neighbourhood
 tr_breaks_nbh_ <- unique(c(
@@ -294,18 +293,18 @@ tr_breaks_nbh_ <- unique(c(
 ))
 tr_breaks_nbh  <- tr_breaks_nbh_[!tr_breaks_nbh_%in%tr_breaks]
 
-break_comparison <- matrix(NA,nrow = length(all_breaks01),ncol = 15)
+break_comparison <- matrix(NA,nrow = length(all_breaks),ncol = 15)
 colnames(break_comparison) <- c("true","ssvs","gets",
                                 "tr.ssvs", "tr.gets",
                                 "fp.ssvs","fp.gets",
                                 "fn.ssvs","fn.gets",
                                 "tr.both","fp.both","fn.both","ssvs_1nn_fp","gets_1nn_fp","ssvs_t3_tr")
-rownames(break_comparison) <- all_breaks01
+rownames(break_comparison) <- all_breaks
 
 # which are true/found
-break_comparison[,1] <- ifelse(all_breaks01%in%tr_breaks,1,0)
-break_comparison[,2] <- ifelse(all_breaks01%in%ssvs_breaks,1,0)
-break_comparison[,3] <- ifelse(all_breaks01%in%gets_breaks01,1,0)
+break_comparison[,1] <- ifelse(all_breaks%in%tr_breaks,1,0)
+break_comparison[,2] <- ifelse(all_breaks%in%ssvs_breaks,1,0)
+break_comparison[,3] <- ifelse(all_breaks%in%gets_breaks,1,0)
 # which are true positive
 break_comparison[,4] <- (break_comparison[,2]+break_comparison[,1])== 2
 break_comparison[,5] <- (break_comparison[,3]+break_comparison[,1])== 2
@@ -320,10 +319,10 @@ break_comparison[,10] <- (break_comparison[,4]+break_comparison[,5])== 2
 break_comparison[,11] <- (break_comparison[,6]+break_comparison[,7])== 2
 break_comparison[,12] <- (break_comparison[,8]+break_comparison[,9])== 2
 
-break_comparison[,13] <- (ifelse(all_breaks01%in%tr_breaks_nbh,1,0)+break_comparison[,6])== 2
-break_comparison[,14] <- (ifelse(all_breaks01%in%tr_breaks_nbh,1,0)+break_comparison[,7])== 2
+break_comparison[,13] <- (ifelse(all_breaks%in%tr_breaks_nbh,1,0)+break_comparison[,6])== 2
+break_comparison[,14] <- (ifelse(all_breaks%in%tr_breaks_nbh,1,0)+break_comparison[,7])== 2
 
-all_t3                  <- ifelse(all_breaks01%in%ssvs_breaks_t2,1,0)
+all_t3                  <- ifelse(all_breaks%in%ssvs_breaks_t2,1,0)
 break_comparison[,15] <- (all_t3+break_comparison[,1])== 2  
 
 
