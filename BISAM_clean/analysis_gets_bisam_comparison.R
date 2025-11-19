@@ -25,8 +25,25 @@ PLOT_MODE <- "slide"  # Change to "publication" for journal-style plots
 # Load required libraries (only for data manipulation)
 library(dplyr)
 
+date <- "2025-11-19_dense"
+gets_lvl <- "0.05"
+bisam_prior <- "imom"
+tau <- "1.92072941034706"
+
 # Set up paths
-data_path <- "./Simulations/2025-11-06/gets_bisam_comparison_gets-0.01_bisam_prior-imom/"
+if(tau == "") {
+  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s/", 
+                       date, 
+                       gets_lvl,
+                       bisam_prior)
+} else {
+  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
+                       date, 
+                       gets_lvl,
+                       bisam_prior,
+                       tau)
+}
+
 
 # Get list of all RDS files in the folder
 file_list <- list.files(
@@ -241,9 +258,46 @@ add_clean_axes <- function(side = 1:2, at_x = NULL, labels_x = NULL,
 # ==============================================================================
 
 # Output file names
-multi_panel_file <- sprintf("Simulations/2025-11-06/ssvs_gets_plots_%s.pdf", settings$suffix)
-precision_recall_file <- sprintf("Simulations/2025-11-06/precision_recall_%s.pdf", settings$suffix)
-f1_score_file <- sprintf("Simulations/2025-11-06/f1_score_%s.pdf", settings$suffix)
+if(tau == "") {
+  multi_panel_file <- sprintf("./Simulations/%s/%s_multi_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+                              date, 
+                              settings$suffix,
+                              gets_lvl,
+                              bisam_prior, 
+                              "auto")
+  precision_recall_file <- sprintf("./Simulations/%s/%s_pr_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+                                   date, 
+                                   settings$suffix,
+                                   gets_lvl,
+                                   bisam_prior, 
+                                   "auto")
+  f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+                           date, 
+                           settings$suffix,
+                           gets_lvl,
+                           bisam_prior, 
+                           "auto")
+  
+} else {
+  multi_panel_file <- sprintf("./Simulations/%s/%s_multi_gets-%s_bisam-%s_tau-%s.pdf", 
+                              date, 
+                              settings$suffix,
+                              gets_lvl,
+                              bisam_prior, 
+                              tau)
+  precision_recall_file <- sprintf("./Simulations/%s/%s_pr_gets-%s_bisam-%s_tau-%s.pdf", 
+                                   date, 
+                                   settings$suffix,
+                                   gets_lvl,
+                                   bisam_prior, 
+                                   tau)
+  f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s.pdf", 
+                           date, 
+                           settings$suffix,
+                           gets_lvl,
+                           bisam_prior, 
+                           tau)
+}
 
 # Open PDF for multi-panel plot
 pdf(multi_panel_file, width = settings$pdf.width, height = settings$pdf.height)
