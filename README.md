@@ -40,7 +40,7 @@ BISAM provides a Bayesian approach to detecting structural breaks in time series
 1. Clone this repository:
 ```r
 # In your terminal
-git clone https://github.com/yourusername/bisam.git
+git clone https://github.com/konradld/bisam.git
 cd bisam
 ```
 
