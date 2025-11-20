@@ -26,7 +26,7 @@ PLOT_MODE <- "slide"  # Change to "publication" for journal-style plots
 library(dplyr)
 
 date <- "2025-11-19_dense"
-gets_lvl <- "0.05"
+gets_lvl <- "0.01"
 bisam_prior <- "imom"
 tau <- "1.92072941034706"
 
