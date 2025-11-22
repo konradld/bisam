@@ -342,15 +342,15 @@ break_comparison[,15] <- (all_t3+break_comparison[,1])== 2
 # Save Results
 #===============================================================================
 
-# folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s/",
-#                         conf$gets_lvl, conf$sis_prior)
-
-dir.create(sprintf("./results/%s/", 
-                   conf$date), 
-           showWarnings = FALSE)
-
-folder_path <- sprintf("./results/%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
-                       conf$date, conf$gets_lvl, conf$sis_prior, conf$tau)
+if (is_slurm) {
+  dir.create(sprintf("./results/%s/", conf$date), showWarnings = FALSE)
+  
+  folder_path <- sprintf("./results/%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
+                         conf$date, conf$gets_lvl, conf$sis_prior, conf$tau)
+} else {
+  folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
+                          conf$gets_lvl, conf$sis_prior, conf$tau)
+}
 
 if (!dir.exists(folder_path)) {dir.create(folder_path)}
 
