@@ -1,5 +1,4 @@
 try(detach("package:mombf", unload=TRUE))
-try(detach("package:BISAM", unload=TRUE))
 try(detach("package:cli", unload=TRUE))
 try(remove.packages("mombf"))
 # .rs.restartR()
