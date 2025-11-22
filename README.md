@@ -58,48 +58,7 @@ source("contr_sim_breaks_fun.R")
 
 ## Quick Start
 
-```r
-# Source the necessary functions
-source("estimate_bisam_fun.R")
-source("pip_window_fun.R")
-source("contr_sim_breaks_fun.R")
-
-# See the example simulation for a complete workflow
-source("00_bisam_simulation.R")
-```
-
-## Usage Example
-
-```r
-# 1. Simulate data with structural breaks
-simulated_data <- contr_sim_breaks_fun(
-  n = 200,              # Sample size
-  break_points = c(50, 150),  # Locations of breaks
-  break_sizes = c(2, -1.5)    # Sizes of breaks
-)
-
-# 2. Estimate breaks using BISAM
-results <- estimate_bisam_fun(simulated_data)
-
-# 3. Calculate PIPs and select breaks
-selected_breaks <- pip_window_fun(
-  results,
-  threshold = 0.5  # PIP threshold for break selection
-)
-```
-
-## Comparison with Gets
-
-This repository includes tools for comparing BISAM with Gets (General-to-Specific) estimation:
-
-- Gets is an econometric methodology for model selection developed by Hendry, Pretis, and others
-- The comparison files (`01_estimation_gets_bisam_comparison.R` and `02_analysis_gets_bisam_comparison.R`) implement Monte Carlo simulations to evaluate relative performance
-- Metrics include break detection accuracy, false positive rates, and estimation precision, f1 score
-
-## Dependencies
-
-- R (≥ 3.5.0)
-- tba
+See the example simulation for a complete workflow in **`00_bisam_simulation.R`**
 
 ## References
 
@@ -107,7 +66,7 @@ tba
 
 ## Contact
 
-tba
+<lucas.konrad@wu.ac.at>
 
 ## Citation
 
