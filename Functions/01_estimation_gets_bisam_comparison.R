@@ -9,9 +9,11 @@ rm(list = ls())
 
 # Get SLURM array ID
 run <- commandArgs(trailingOnly = TRUE)
-run_numeric <- if (length(run) == 0) 1 else as.numeric(run)
+is_slurm <- if (length(run) > 0) TRUE else FALSE
+# code is to be run on a SLURM cluster. For illustration default to setting "1" if run locally 
+run_numeric <- if (is_slurm) as.numeric(run) else 1
 
-if(length(run) != 0) {
+if(is_slurm) {
   .libPaths("~/R_LIBS")
 }
 
@@ -74,8 +76,17 @@ S2_TRUE <- ERROR_SD^2
 # ==============================================================================
 # DATA SIMULATION
 # ==============================================================================
-# source("./BISAM_clean/contr_sim_breaks_fun.R")
-source("../code/contr_sim_breaks_fun.R")
+
+if (is_slurm) {
+  source("../code/contr_sim_breaks_fun.R")
+  source("../code/estimate_bisam_fun.R")
+  source("../code/pip_window_fun.R")
+} else {
+  source("./Functions/contr_sim_breaks_fun.R")
+  source("./Functions/estimate_bisam_fun.R")
+  source("./Functions/pip_window_fun.R")
+}
+
 sim <- contr_sim_breaks(
   n = Ni, 
   t = Nt, 
@@ -92,7 +103,6 @@ sim <- contr_sim_breaks(
   error.sd = ERROR_SD
 )
 
-
 data<- sim$data
 dat <- as.data.frame(data)
 
@@ -107,7 +117,7 @@ formula  <- paste('y',
                   paste(colnames(dat)[grepl('x\\d+',colnames(data))],collapse = '+'),
                   sep = '~')
 
-if(NX==0 & DO_CONST){formula <- 'y~c'} #--------------------------------------------- careful not always true !!
+if(NX==0 & DO_CONST){formula <- 'y~c'} #------------- careful not always true !!
 
 index = c("n","t")
 
@@ -143,7 +153,7 @@ rownames(gets_coefs) <- gets_breaks
 
 results$gets[[as.character(sig_lvl)]] <- gets_coefs
 
-# =========================== Bayesian SSVS ==============================.=====
+# =========================== BISAM ======================================.=====
 
 data <- sim$data
 
@@ -204,8 +214,7 @@ if(conf$tau == "auto") {
 # ==============================================================================
 # RUN MODEL
 # ==============================================================================
-# source("./BISAM_clean/estimate_bisam_fun.R")
-source("../code/estimate_bisam_fun.R")
+
 results$b_ssvs <- estimate_bisam(
   data = data,
   do_constant = DO_CONST,
@@ -241,14 +250,18 @@ results$b_ssvs <- estimate_bisam(
   do_geweke_test = DO_GEWEKE_TEST
 )
 
-#=============================================================================
+#===============================================================================
 # Start Analysis
-#=============================================================================
+#===============================================================================
 #helper function
 make_sis_names <- function (window_breaks) {
   win_size <- unique(as.numeric(window_breaks$end_time) -
                        as.numeric(window_breaks$start_time) + 1)
-  if (length(win_size) > 1) stop("incorrect window construction - non uniform window length!")
+  
+  if (length(win_size) > 1) {
+    stop("incorrect window construction - non uniform window length!")
+  }
+  
   paste("sis",
         rep(window_breaks$unit, each = win_size),
         mapply(
@@ -265,8 +278,7 @@ tr_breaks     <- rownames(sim$tr.idx)
 tr_breaks_index_matrix <- str_match(tr_breaks, "sis\\.(\\d+)\\.(\\d+)")
 
 ssvs_breaks   <- names(results$b_ssvs$coefs$omega[results$b_ssvs$coefs$omega > 0.5])
-# source("./BISAM_clean/pip_window_fun.R")
-source("../code/pip_window_fun.R")
+
 ssvs_breaks <- pip_window(results$b_ssvs, win_size = 1, op = ">=", pip_threshold = 0.50)
 ssvs_breaks <- make_sis_names(ssvs_breaks)
 
@@ -322,13 +334,13 @@ break_comparison[,12] <- (break_comparison[,8]+break_comparison[,9])== 2
 break_comparison[,13] <- (ifelse(all_breaks%in%tr_breaks_nbh,1,0)+break_comparison[,6])== 2
 break_comparison[,14] <- (ifelse(all_breaks%in%tr_breaks_nbh,1,0)+break_comparison[,7])== 2
 
-all_t3                  <- ifelse(all_breaks%in%ssvs_breaks_t2,1,0)
+all_t3                <- ifelse(all_breaks%in%ssvs_breaks_t2,1,0)
 break_comparison[,15] <- (all_t3+break_comparison[,1])== 2  
 
 
-#=============================================================================
+#===============================================================================
 # Save Results
-#=============================================================================
+#===============================================================================
 
 # folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s/",
 #                         conf$gets_lvl, conf$sis_prior)
@@ -346,6 +358,6 @@ file_name <- sprintf("breaksize-%0.1fSD_rep%0.0f.RDS",conf$rel_effect, conf$numb
 
 saveRDS(break_comparison, file = paste0(folder_path, file_name))
 
-#=============================================================================
+#===============================================================================
 # End of File
-#=============================================================================
+#===============================================================================

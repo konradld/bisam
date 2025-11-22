@@ -57,7 +57,7 @@ S2_TRUE <- ERROR_SD^2
 # DATA SIMULATION
 # ==============================================================================
 
-source("./BISAM_clean/contr_sim_breaks_fun.R")
+source("./Functions/contr_sim_breaks_fun.R")
 
 sim <- contr_sim_breaks(
   n = Ni, 
@@ -177,7 +177,7 @@ DO_GEWEKE_TEST <- FALSE
 # RUN MODEL
 # ==============================================================================
 
-source("./BISAM_clean/estimate_bisam_fun.R")
+source("./Functions/estimate_bisam_fun.R")
 
 data = data
 do_constant = DO_CONST
