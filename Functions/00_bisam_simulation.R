@@ -162,8 +162,8 @@ STEP_INCL_PRIOR <- "bern"
 
 # Advanced options
 DO_SPLIT_Z <- TRUE
-DO_CLUSTER_S2 <- FALSE
-DO_CHECK_OUTLIER <- FALSE
+DO_CLUSTER_S2 <- TRUE
+DO_CHECK_OUTLIER <- TRUE
 # Outlier detection options
 OUTLIER_INCL_ALPHA <- 1
 OUTLIER_INCL_BETA <- 10
@@ -212,6 +212,7 @@ outlier_incl_beta = OUTLIER_INCL_BETA
 outlier_scale = OUTLIER_SCALE
 do_sparse_computation = DO_SPARSE_COMPUTATION
 do_geweke_test = DO_GEWEKE_TEST
+steps_to_check = "all"
 
 mod <- estimate_bisam(
   data = data,

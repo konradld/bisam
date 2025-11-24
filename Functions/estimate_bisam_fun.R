@@ -334,7 +334,8 @@ estimate_bisam <- function(
       
       # Compute log probabilities for outlier models
       log_p0 <- dnorm(residuals, 0, sqrt_s2_i, log = TRUE) + log(1 - k_i)
-      log_p1 <- dnorm(residuals, 0, sqrt_outlier_scale * sqrt_s2_i, log = TRUE) + log(k_i)
+      # log_p1 <- dnorm(residuals, 0, sqrt_outlier_scale * sqrt_s2_i, log = TRUE) + log(k_i)
+      log_p1 <- mombf::dimom(residuals, tau = outlier_scale, phi = s2_i, logscale = TRUE) + log(k_i)
       
       # Direct calculation of log probability
       log_prob_outlier <- log_p1 - matrixStats::rowLogSumExps(cbind(log_p0, log_p1))
