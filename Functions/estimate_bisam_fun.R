@@ -404,7 +404,7 @@ estimate_bisam <- function(
     }
     
     b_i <- try((bN + t(chol(BN)) %*% rnorm(p)), silent = TRUE)
-    if (is(b_i, "try-error")) { b_i <- t(rmvnorm(1,bN,BN)) }
+    if (is(b_i, "try-error")) { b_i <- t(rmvnorm(1,as.vector(bN),as.matrix(BN))) }
     
     Xb_i <- X %*% b_i
     
