@@ -145,7 +145,7 @@ NDRAW <- 2000L
 NBURN <- 500L
 
 # Prior settings
-BETA_VARIANCE_SCALE <- 10
+BETA_VARIANCE_SCALE <- 100
 
 SIGMA2_SHAPE <- NULL
 SIGMA2_RATE <- NULL
@@ -309,7 +309,7 @@ COL_FIT <- "#1B9E77"     # Teal
 COL_GRID <- "gray70"
 
 
-pdf("./Simulations/sim_setup_dense.pdf", width = 16, height = 9)
+# pdf("./Simulations/sim_setup_dense.pdf", width = 16, height = 9)
 
 # Set up plotting parameters
 par(
@@ -481,4 +481,4 @@ title(
   font.main = 2
 )
 
-dev.off()
+# dev.off()
