@@ -14,6 +14,9 @@ set.seed(12345)
 # Prior specification
 PRIOR <- "imom"
 
+# Estimate Prior Inclusion Probability
+DO_AUTO_STEP_INCL_PRIOR <- TRUE
+
 # Twostage Estimation?
 DO_TWOSTAGE <- FALSE
 
@@ -141,8 +144,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 2000L
-NBURN <- 500L
+NDRAW <- 1000L
+NBURN <- 200L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 100
@@ -179,6 +182,7 @@ DO_GEWEKE_TEST <- FALSE
 
 source("./Functions/estimate_bisam_fun.R")
 
+# Assign all values explicitly for debugging
 data = data
 do_constant = DO_CONST
 do_individual_fe = DO_INDIV_FE
@@ -249,6 +253,16 @@ mod <- estimate_bisam(
   do_sparse_computation = DO_SPARSE_COMPUTATION,
   do_geweke_test = DO_GEWEKE_TEST
 )
+
+if (DO_AUTO_STEP_INCL_PRIOR) {
+  if (DO_CLUSTER_S2) {
+    s2_hat_vec <- rep(mod$coefs$sigma2, each = Nt)
+  } else {
+    s2_hat_vec <- rep(mod$coefs$sigma2, times = Ni * Nt)
+  }
+  y_tilde <- (mod$data$y - mod$data$X %*% mod$coefs$beta) / s2_hat_vec
+    w_hat =  EBayesq(y_tilde, slab='cauchy')
+}
 
 if (DO_TWOSTAGE) {
   pip <- mod$coefs$omega
