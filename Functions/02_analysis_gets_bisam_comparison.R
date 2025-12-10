@@ -25,10 +25,10 @@ PLOT_MODE <- "slide"  # Change to "publication" for journal-style plots
 # Load required libraries (only for data manipulation)
 library(dplyr)
 
-date <- "2025-11-19_dense"
-gets_lvl <- "0.01"
+date <- "2025-12-09_pat_test"
+gets_lvl <- "0.05"
 bisam_prior <- "imom"
-tau <- "1.92072941034706"
+tau <- "4"
 
 # Set up paths
 if(tau == "") {

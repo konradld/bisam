@@ -26,10 +26,10 @@ library(mombf)
 config <- expand.grid(
   sis_prior = c("imom"),
   gets_lvl = c(0.05,0.01),
-  rel_effect = c(1, 1.5, 2, 3, 6, 10),
+  rel_effect = c(0.5, 1, 1.5, 2, 5, 10),
   tau = c(4, "auto"),
   number_reps = 1:100,
-  date = "2025-11-18_sparse",
+  date = "2025-12-09_pat_test",
   stringsAsFactors = FALSE
 )
 conf <- config[run_numeric,]
@@ -348,7 +348,7 @@ if (is_slurm) {
   folder_path <- sprintf("./results/%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
                          conf$date, conf$gets_lvl, conf$sis_prior, conf$tau)
 } else {
-  folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
+  folder_path <- sprintf("./Simulations/2025-12-09_pat_test/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
                           conf$gets_lvl, conf$sis_prior, conf$tau)
 }
 
