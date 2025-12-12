@@ -21,14 +21,14 @@ DO_AUTO_STEP_INCL_PRIOR <- FALSE
 DO_TWOSTAGE <- FALSE
 
 # Data dimensions
-Ni <- 8          # number of sim. observations
-Nt <- 50          # number of sim. time periods
+Ni <- 5           # number of sim. observations
+Nt <- 300         # number of sim. time periods
 NX <- 0           # number of regressors
 
 # Model structure
 DO_CONST <- FALSE    # inclusion of a constant
 DO_INDIV_FE <- TRUE     # inclusion of indiv. fixed effects
-DO_TIME_FE <- TRUE     # inclusion of time fixed effects
+DO_TIME_FE <- FALSE     # inclusion of time fixed effects
 DO_OUTLIERS <- FALSE      # inclusion of indicator saturation
 DO_STEP_SATURATION <- TRUE      # inclusion of stepshift saturation
 
@@ -151,8 +151,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 1000L
-NBURN <- 200L
+NDRAW <- 3000L
+NBURN <- 500L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 100
@@ -173,7 +173,7 @@ STEP_INCL_PRIOR <- "bern"
 # Advanced options
 DO_SPLIT_Z <- TRUE
 DO_CLUSTER_S2 <- TRUE
-DO_CHECK_OUTLIER <- TRUE
+DO_CHECK_OUTLIER <- FALSE
 # Outlier detection options
 OUTLIER_INCL_ALPHA <- 1
 OUTLIER_INCL_BETA <- 10
@@ -269,7 +269,7 @@ if (DO_AUTO_STEP_INCL_PRIOR) {
   }
   y_tilde <- round(solve(crossprod(Z)),10) %*% t(Z) %*% ((mod$data$y - mod$data$X %*% mod$coefs$beta) / s2_hat_vec)
   STEP_INCL_PROB <- EbayesThresh::wfromx(y_tilde, prior = "cauchy")
-  
+  EbayesThresh::Eb
   DO_TWOSTAGE <- TRUE
 }
 
