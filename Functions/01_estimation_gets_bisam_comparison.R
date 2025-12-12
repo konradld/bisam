@@ -26,11 +26,11 @@ library(glmnet)  # Added for adaptive Lasso
 
 config <- expand.grid(
   sis_prior = c("imom"),
-  gets_lvl = c(0.05,0.01),
+  gets_lvl = c(0.01),
   rel_effect = c(1, 1.5, 2, 3, 6, 10),
   tau = mombf::priorp2g(0.05, 1, nu = 1, prior = "iMom"),
   number_reps = 1:100,
-  date = "2025-11-18_sparse",
+  date = "2025-12-12_sparse",
   stringsAsFactors = FALSE
 )
 conf <- config[run_numeric,]
@@ -79,9 +79,9 @@ S2_TRUE <- ERROR_SD^2
 # ==============================================================================
 
 if (is_slurm) {
-  source("../code/contr_sim_breaks_fun.R")
-  source("../code/estimate_bisam_fun.R")
-  source("../code/pip_window_fun.R")
+  source("./code/contr_sim_breaks_fun.R")
+  source("./code/estimate_bisam_fun.R")
+  source("./code/pip_window_fun.R")
 } else {
   source("./Functions/contr_sim_breaks_fun.R")
   source("./Functions/estimate_bisam_fun.R")
@@ -281,8 +281,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 10000L
-NBURN <- 2000L
+NDRAW <- 5000L
+NBURN <- 1000L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 100

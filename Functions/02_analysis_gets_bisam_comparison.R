@@ -1,8 +1,8 @@
 ################################################################################
-# BISAM vs GETS Comparison Analysis
+# BISAM vs GETS vs ALASSO Comparison Analysis
 # 
-# Description: Comprehensive comparison of BISAM and GETS methods across 
-#              different threshold levels (SD breakpoints)
+# Description: Comprehensive comparison of BISAM, GETS, and Adaptive Lasso 
+#              methods across different threshold levels (SD breakpoints)
 # 
 # Output: Performance metrics, plots, and summary statistics
 #         Now with SLIDE-FRIENDLY options!
@@ -25,19 +25,19 @@ PLOT_MODE <- "slide"  # Change to "publication" for journal-style plots
 # Load required libraries (only for data manipulation)
 library(dplyr)
 
-date <- "2025-11-19_dense"
+date <- "2025-12-12_sparse"
 gets_lvl <- "0.01"
 bisam_prior <- "imom"
 tau <- "1.92072941034706"
 
 # Set up paths
 if(tau == "") {
-  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s/", 
+  data_path <- sprintf("./Simulations/%s/gets_bisam_alasso_comparison_gets-%s_bisam_prior-%s/", 
                        date, 
                        gets_lvl,
                        bisam_prior)
 } else {
-  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
+  data_path <- sprintf("./Simulations/%s/gets_bisam_alasso_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
                        date, 
                        gets_lvl,
                        bisam_prior,
@@ -58,8 +58,15 @@ file_list <- list.files(
 
 # Read and combine all simulation results
 combined_data <- lapply(file_list, function(file) {
-  # Read the matrix
-  mat <- readRDS(file)
+  # Read the results
+  result_obj <- readRDS(file)
+  
+  # Check if it's the new format (list) or old format (matrix)
+  if (is.list(result_obj) && "break_comparison" %in% names(result_obj)) {
+    mat <- result_obj$break_comparison
+  } else {
+    mat <- result_obj
+  }
   
   # Extract metadata from filename
   filename <- basename(file)
@@ -111,16 +118,24 @@ print(summary_table)
 breaksize_labels <- colnames(summary_table)
 sd_numeric <- as.numeric(stringr::str_extract(breaksize_labels, "\\d+\\.\\d(?=SD)"))
 
-# Initialize metrics data frame
+# Initialize metrics data frame for all three methods
 metrics <- data.frame(
-  SD = rep(breaksize_labels, 2),
-  SD_num = rep(sd_numeric, 2),
-  Method = rep(c("BISAM", "GETS"), each = 6),
-  TP = c(summary_table["tr.ssvs", ], summary_table["tr.gets", ]),
-  FP = c(summary_table["fp.ssvs", ], summary_table["fp.gets", ]),
-  FN = c(summary_table["fn.ssvs", ], summary_table["fn.gets", ]),
-  Total_Found = c(summary_table["ssvs", ], summary_table["gets", ]),
-  True_Total = rep(summary_table["true", ], 2)
+  SD = rep(breaksize_labels, 3),
+  SD_num = rep(sd_numeric, 3),
+  Method = rep(c("BISAM", "GETS", "ALASSO"), each = length(breaksize_vals)),
+  TP = c(summary_table["tr.ssvs", ], 
+         summary_table["tr.gets", ],
+         summary_table["tr.alasso", ]),
+  FP = c(summary_table["fp.ssvs", ], 
+         summary_table["fp.gets", ],
+         summary_table["fp.alasso", ]),
+  FN = c(summary_table["fn.ssvs", ], 
+         summary_table["fn.gets", ],
+         summary_table["fn.alasso", ]),
+  Total_Found = c(summary_table["ssvs", ], 
+                  summary_table["gets", ],
+                  summary_table["alasso", ]),
+  True_Total = rep(summary_table["true", ], 3)
 )
 
 # Calculate derived metrics
@@ -132,6 +147,15 @@ metrics <- within(metrics, {
   Specificity <- 1 - FDR
 })
 
+# Handle NaN values (when TP + FP = 0 or TP + FN = 0)
+metrics$Precision[is.nan(metrics$Precision)] <- 0
+metrics$Recall[is.nan(metrics$Recall)] <- 0
+metrics$F1[is.nan(metrics$F1)] <- 0
+
+# Display metrics summary
+cat("\n\nPerformance Metrics by Method:\n")
+print(metrics)
+
 # ==============================================================================
 # 5. COLOR PALETTE
 # ==============================================================================
@@ -140,8 +164,9 @@ metrics <- within(metrics, {
 colors <- list(
   ssvs = "#0072B2",      # Deep blue
   gets = "#D55E00",      # Vermillion/burnt orange  
-  window = "#009E73",    # Bluish green
-  standard = "#CC79A7",  # Reddish purple
+  alasso = "#009E73",    # Bluish green (was window color)
+  window = "#CC79A7",    # Reddish purple (was standard color)
+  standard = "#E69F00",  # Orange (new)
   gray = "#808080",      # Neutral gray
   lightgray = "#E5E5E5", # Light gray for grids
   darkgray = "#404040"   # Dark gray for text
@@ -265,12 +290,6 @@ if(tau == "") {
                               gets_lvl,
                               bisam_prior, 
                               "auto")
-  precision_recall_file <- sprintf("./Simulations/%s/%s_pr_gets-%s_bisam-%s_tau-%s_%s.pdf", 
-                                   date, 
-                                   settings$suffix,
-                                   gets_lvl,
-                                   bisam_prior, 
-                                   "auto")
   f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s_%s.pdf", 
                            date, 
                            settings$suffix,
@@ -285,12 +304,6 @@ if(tau == "") {
                               gets_lvl,
                               bisam_prior, 
                               tau)
-  precision_recall_file <- sprintf("./Simulations/%s/%s_pr_gets-%s_bisam-%s_tau-%s.pdf", 
-                                   date, 
-                                   settings$suffix,
-                                   gets_lvl,
-                                   bisam_prior, 
-                                   tau)
   f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s.pdf", 
                            date, 
                            settings$suffix,
@@ -305,13 +318,15 @@ pdf(multi_panel_file, width = settings$pdf.width, height = settings$pdf.height)
 # Use 2x3 layout
 par(mfrow = c(2, 3), oma = c(0, 0, 0, 0))
 
-# ------------------------------------------------------------------------------
-# Plot 1: Precision and Recall
-# ------------------------------------------------------------------------------
-setup_plot()
-
+# Extract indices for each method
 ssvs_idx <- metrics$Method == "BISAM"
 gets_idx <- metrics$Method == "GETS"
+alasso_idx <- metrics$Method == "ALASSO"
+
+# ------------------------------------------------------------------------------
+# Plot 1: Precision
+# ------------------------------------------------------------------------------
+setup_plot()
 
 plot(
   x = log10(sd_numeric), 
@@ -319,8 +334,8 @@ plot(
   xlim = range(log10(sd_numeric)),
   ylim = c(0, 1),
   xlab = "Threshold Level (SD, log scale)",
-  ylab = "Performance Score",
-  main = "Precision and Recall",
+  ylab = "Precision",
+  main = "Precision",
   type = "n",
   axes = FALSE,
   xaxs = "i",
@@ -330,27 +345,21 @@ plot(
 # Subtle grid
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
-# Plot Precision (solid lines)
+# Plot Precision
 lines(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
-      col = colors$ssvs, lwd = settings$lwd.line, lty = 1)
+      col = colors$ssvs, lwd = settings$lwd.line)
 points(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
        col = colors$ssvs, pch = 16, cex = settings$cex.point)
 
 lines(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
-      col = colors$gets, lwd = settings$lwd.line, lty = 1)
+      col = colors$gets, lwd = settings$lwd.line)
 points(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point)
 
-# Plot Recall (dashed lines)
-lines(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
-      col = colors$ssvs, lwd = settings$lwd.line, lty = 2)
-points(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
-       col = colors$ssvs, pch = 17, cex = settings$cex.point)
-
-lines(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
-      col = colors$gets, lwd = settings$lwd.line, lty = 2)
-points(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
-       col = colors$gets, pch = 17, cex = settings$cex.point)
+lines(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+      col = colors$alasso, lwd = settings$lwd.line)
+points(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+       col = colors$alasso, pch = 16, cex = settings$cex.point)
 
 add_clean_axes(
   at_x = log10(sd_numeric), 
@@ -359,11 +368,10 @@ add_clean_axes(
 )
 
 legend("bottomright", 
-       legend = c("BISAM Precision", "GETS Precision", 
-                  "BISAM Recall", "GETS Recall"),
-       col = c(colors$ssvs, colors$gets, colors$ssvs, colors$gets),
-       lty = c(1, 1, 2, 2),
-       pch = c(16, 16, 17, 17),
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
+       lty = 1,
+       pch = 16,
        lwd = settings$lwd.line,
        bty = "n",
        cex = settings$cex.legend,
@@ -373,7 +381,64 @@ legend("bottomright",
 mtext("A", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, font = 2, adj = 0)
 
 # ------------------------------------------------------------------------------
-# Plot 2: F1 Score Comparison
+# Plot 2: Recall
+# ------------------------------------------------------------------------------
+setup_plot()
+
+plot(
+  x = log10(sd_numeric), 
+  y = NULL,
+  xlim = range(log10(sd_numeric)),
+  ylim = c(0, 1),
+  xlab = "Threshold Level (SD, log scale)",
+  ylab = "Recall (Sensitivity)",
+  main = "Recall",
+  type = "n",
+  axes = FALSE,
+  xaxs = "i",
+  yaxs = "i"
+)
+
+# Subtle grid
+abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
+
+# Plot Recall
+lines(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
+      col = colors$ssvs, lwd = settings$lwd.line)
+points(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
+       col = colors$ssvs, pch = 16, cex = settings$cex.point)
+
+lines(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
+      col = colors$gets, lwd = settings$lwd.line)
+points(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
+       col = colors$gets, pch = 16, cex = settings$cex.point)
+
+lines(log10(metrics$SD_num[alasso_idx]), metrics$Recall[alasso_idx], 
+      col = colors$alasso, lwd = settings$lwd.line)
+points(log10(metrics$SD_num[alasso_idx]), metrics$Recall[alasso_idx], 
+       col = colors$alasso, pch = 16, cex = settings$cex.point)
+
+add_clean_axes(
+  at_x = log10(sd_numeric), 
+  labels_x = breaksize_labels,
+  at_y = seq(0, 1, 0.2)
+)
+
+legend("bottomright", 
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
+       lty = 1,
+       pch = 16,
+       lwd = settings$lwd.line,
+       bty = "n",
+       cex = settings$cex.legend,
+       pt.cex = settings$cex.point * 0.9)
+
+# Panel label
+mtext("B", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, font = 2, adj = 0)
+
+# ------------------------------------------------------------------------------
+# Plot 3: F1 Score Comparison
 # ------------------------------------------------------------------------------
 setup_plot()
 
@@ -403,6 +468,11 @@ lines(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx],
 points(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point)
 
+lines(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+      col = colors$alasso, lwd = settings$lwd.line)
+points(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+       col = colors$alasso, pch = 16, cex = settings$cex.point)
+
 add_clean_axes(
   at_x = log10(sd_numeric), 
   labels_x = breaksize_labels,
@@ -410,80 +480,13 @@ add_clean_axes(
 )
 
 legend("bottomright", 
-       legend = c("BISAM", "GETS"),
-       col = c(colors$ssvs, colors$gets),
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
        lty = 1,
        lwd = settings$lwd.line,
        pch = 16,
        bty = "n",
        cex = settings$cex.legend,
-       pt.cex = settings$cex.point * 0.9)
-
-mtext("B", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, font = 2, adj = 0)
-
-# ------------------------------------------------------------------------------
-# Plot 3: Detection Rates
-# ------------------------------------------------------------------------------
-setup_plot()
-
-detection_rate_ssvs <- summary_table["ssvs", ] / summary_table["true", ]
-detection_rate_gets <- summary_table["gets", ] / summary_table["true", ]
-true_detection_rate_ssvs <- summary_table["tr.ssvs", ] / summary_table["true", ]
-true_detection_rate_gets <- summary_table["tr.gets", ] / summary_table["true", ]
-
-plot(
-  x = log10(sd_numeric), 
-  y = NULL,
-  xlim = range(log10(sd_numeric)),
-  ylim = c(0, 1.5),
-  xlab = "Threshold Level (SD, log scale)",
-  ylab = "Detection Rate",
-  main = "Detection Rates",
-  type = "n",
-  axes = FALSE,
-  xaxs = "i",
-  yaxs = "i"
-)
-
-abline(h = seq(0, 1.5, 0.25), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
-abline(h = 1, col = colors$gray, lty = 2, lwd = settings$lwd.axis)
-
-# True detection rate (solid)
-lines(log10(sd_numeric), true_detection_rate_ssvs, 
-      col = colors$ssvs, lwd = settings$lwd.line, lty = 1)
-points(log10(sd_numeric), true_detection_rate_ssvs, 
-       col = colors$ssvs, pch = 16, cex = settings$cex.point)
-
-lines(log10(sd_numeric), true_detection_rate_gets, 
-      col = colors$gets, lwd = settings$lwd.line, lty = 1)
-points(log10(sd_numeric), true_detection_rate_gets, 
-       col = colors$gets, pch = 16, cex = settings$cex.point)
-
-# Total detection rate (dashed)
-lines(log10(sd_numeric), detection_rate_ssvs, 
-      col = colors$ssvs, lwd = settings$lwd.line, lty = 3)
-points(log10(sd_numeric), detection_rate_ssvs, 
-       col = colors$ssvs, pch = 1, cex = settings$cex.point, lwd = settings$lwd.axis)
-
-lines(log10(sd_numeric), detection_rate_gets, 
-      col = colors$gets, lwd = settings$lwd.line, lty = 3)
-points(log10(sd_numeric), detection_rate_gets, 
-       col = colors$gets, pch = 1, cex = settings$cex.point, lwd = settings$lwd.axis)
-
-add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
-  at_y = seq(0, 1.5, 0.25)
-)
-
-legend("bottomright", 
-       legend = c("BISAM True", "GETS True", "BISAM Total", "GETS Total"),
-       col = c(colors$ssvs, colors$gets, colors$ssvs, colors$gets),
-       lty = c(1, 1, 3, 3),
-       pch = c(16, 16, 1, 1),
-       lwd = settings$lwd.line,
-       bty = "n",
-       cex = settings$cex.legend * 0.95,
        pt.cex = settings$cex.point * 0.9)
 
 mtext("C", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, font = 2, adj = 0)
@@ -493,11 +496,12 @@ mtext("C", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, fo
 # ------------------------------------------------------------------------------
 setup_plot()
 
-y_vals_tp <- c(summary_table["tr.ssvs", ], summary_table["tr.gets", ])
+y_vals_tp <- c(summary_table["tr.ssvs", ], summary_table["tr.gets", ], 
+               summary_table["tr.alasso", ])
 max_y_tp <- max(y_vals_tp)
 
-bar_width <- if (PLOT_MODE == "slide") 0.04 else 0.03
-offset <- if (PLOT_MODE == "slide") 0.002 else 0.001
+bar_width <- if (PLOT_MODE == "slide") 0.03 else 0.02
+offset <- if (PLOT_MODE == "slide") 0.005 else 0.003
 
 plot(
   x = log10(sd_numeric), 
@@ -513,14 +517,21 @@ plot(
   yaxs = "i"
 )
 
-for (j in 1:6) {
-  rect(log10(sd_numeric[j]) - bar_width - offset, 0,
-       log10(sd_numeric[j]) - offset, summary_table["tr.ssvs", j],
+for (j in 1:length(sd_numeric)) {
+  # BISAM (left)
+  rect(log10(sd_numeric[j]) - 2*bar_width - offset, 0,
+       log10(sd_numeric[j]) - bar_width - offset, summary_table["tr.ssvs", j],
        col = colors$ssvs, border = NA)
   
-  rect(log10(sd_numeric[j]) + offset, 0,
-       log10(sd_numeric[j]) + bar_width + offset, summary_table["tr.gets", j],
+  # GETS (middle)
+  rect(log10(sd_numeric[j]) - bar_width/2, 0,
+       log10(sd_numeric[j]) + bar_width/2, summary_table["tr.gets", j],
        col = colors$gets, border = NA)
+  
+  # ALASSO (right)
+  rect(log10(sd_numeric[j]) + bar_width + offset, 0,
+       log10(sd_numeric[j]) + 2*bar_width + offset, summary_table["tr.alasso", j],
+       col = colors$alasso, border = NA)
 }
 
 add_clean_axes(
@@ -529,8 +540,8 @@ add_clean_axes(
 )
 
 legend("topleft", 
-       legend = c("BISAM", "GETS"),
-       fill = c(colors$ssvs, colors$gets),
+       legend = c("BISAM", "GETS", "ALASSO"),
+       fill = c(colors$ssvs, colors$gets, colors$alasso),
        border = NA,
        bty = "n",
        cex = settings$cex.legend)
@@ -542,7 +553,8 @@ mtext("D", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, fo
 # ------------------------------------------------------------------------------
 setup_plot()
 
-y_vals_fp <- c(summary_table["fp.ssvs", ], summary_table["fp.gets", ])
+y_vals_fp <- c(summary_table["fp.ssvs", ], summary_table["fp.gets", ],
+               summary_table["fp.alasso", ])
 max_y_fp <- max(y_vals_fp)
 
 plot(
@@ -559,14 +571,21 @@ plot(
   yaxs = "i"
 )
 
-for (j in 1:6) {
-  rect(log10(sd_numeric[j]) - bar_width - offset, 0,
-       log10(sd_numeric[j]) - offset, summary_table["fp.ssvs", j],
+for (j in 1:length(sd_numeric)) {
+  # BISAM (left)
+  rect(log10(sd_numeric[j]) - 2*bar_width - offset, 0,
+       log10(sd_numeric[j]) - bar_width - offset, summary_table["fp.ssvs", j],
        col = colors$ssvs, border = NA)
   
-  rect(log10(sd_numeric[j]) + offset, 0,
-       log10(sd_numeric[j]) + bar_width + offset, summary_table["fp.gets", j],
+  # GETS (middle)
+  rect(log10(sd_numeric[j]) - bar_width/2, 0,
+       log10(sd_numeric[j]) + bar_width/2, summary_table["fp.gets", j],
        col = colors$gets, border = NA)
+  
+  # ALASSO (right)
+  rect(log10(sd_numeric[j]) + bar_width + offset, 0,
+       log10(sd_numeric[j]) + 2*bar_width + offset, summary_table["fp.alasso", j],
+       col = colors$alasso, border = NA)
 }
 
 add_clean_axes(
@@ -575,8 +594,8 @@ add_clean_axes(
 )
 
 legend("topright", 
-       legend = c("BISAM", "GETS"),
-       fill = c(colors$ssvs, colors$gets),
+       legend = c("BISAM", "GETS", "ALASSO"),
+       fill = c(colors$ssvs, colors$gets, colors$alasso),
        border = NA,
        bty = "n",
        cex = settings$cex.legend)
@@ -584,21 +603,28 @@ legend("topright",
 mtext("E", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, font = 2, adj = 0)
 
 # ------------------------------------------------------------------------------
-# Plot 6: BISAM Window Analysis
+# Plot 6: Near Misses (1-Period Neighbor False Positives)
 # ------------------------------------------------------------------------------
 setup_plot()
 
-standard_rate <- summary_table["tr.ssvs", ] / summary_table["true", ]
-window_rate <- summary_table["ssvs_t3_tr", ] / summary_table["true", ]
+# Calculate near-miss rates (FP within 1 period of true breaks)
+near_miss_ssvs <- summary_table["ssvs_1nn_fp", ]
+near_miss_gets <- summary_table["gets_1nn_fp", ]
+near_miss_alasso <- summary_table["alasso_1nn_fp", ]
+
+# Calculate as proportion of all false positives
+near_miss_prop_ssvs <- near_miss_ssvs / pmax(summary_table["fp.ssvs", ], 1)
+near_miss_prop_gets <- near_miss_gets / pmax(summary_table["fp.gets", ], 1)
+near_miss_prop_alasso <- near_miss_alasso / pmax(summary_table["fp.alasso", ], 1)
 
 plot(
   x = log10(sd_numeric), 
   y = NULL,
-  xlim = range(log10(sd_numeric)) + c(-0.15, 0.15),
+  xlim = range(log10(sd_numeric)),
   ylim = c(0, 1),
   xlab = "Threshold Level (SD, log scale)",
-  ylab = "True Positive Rate",
-  main = "BISAM: Standard vs Window",
+  ylab = "Proportion of False Positives",
+  main = "Near Misses (±1 Period)",
   type = "n",
   axes = FALSE,
   xaxs = "i",
@@ -607,15 +633,21 @@ plot(
 
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
-for (j in 1:6) {
-  rect(log10(sd_numeric[j]) - bar_width - offset, 0,
-       log10(sd_numeric[j]) - offset, standard_rate[j],
-       col = colors$standard, border = NA)
-  
-  rect(log10(sd_numeric[j]) + offset, 0,
-       log10(sd_numeric[j]) + bar_width + offset, window_rate[j],
-       col = colors$window, border = NA)
-}
+# Plot near-miss proportions
+lines(log10(sd_numeric), near_miss_prop_ssvs, 
+      col = colors$ssvs, lwd = settings$lwd.line)
+points(log10(sd_numeric), near_miss_prop_ssvs, 
+       col = colors$ssvs, pch = 16, cex = settings$cex.point)
+
+lines(log10(sd_numeric), near_miss_prop_gets, 
+      col = colors$gets, lwd = settings$lwd.line)
+points(log10(sd_numeric), near_miss_prop_gets, 
+       col = colors$gets, pch = 16, cex = settings$cex.point)
+
+lines(log10(sd_numeric), near_miss_prop_alasso, 
+      col = colors$alasso, lwd = settings$lwd.line)
+points(log10(sd_numeric), near_miss_prop_alasso, 
+       col = colors$alasso, pch = 16, cex = settings$cex.point)
 
 add_clean_axes(
   at_x = log10(sd_numeric), 
@@ -623,12 +655,15 @@ add_clean_axes(
   at_y = seq(0, 1, 0.2)
 )
 
-legend("topleft", 
-       legend = c("Standard (exact)", sprintf("Window (%0.0f)",2)),
-       fill = c(colors$standard, colors$window),
-       border = NA,
+legend("topright", 
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
+       lty = 1,
+       pch = 16,
+       lwd = settings$lwd.line,
        bty = "n",
-       cex = settings$cex.legend)
+       cex = settings$cex.legend,
+       pt.cex = settings$cex.point * 0.9)
 
 mtext("F", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, font = 2, adj = 0)
 
@@ -638,8 +673,15 @@ dev.off()
 # 9. CREATE INDIVIDUAL HIGH-RESOLUTION PLOTS
 # ==============================================================================
 
-# Individual plot for Precision and Recall
-pdf(precision_recall_file, width = settings$pdf.width.single, height = settings$pdf.height.single)
+# Individual plot for Precision
+precision_file_individual <- sprintf("./Simulations/%s/%s_precision_gets-%s_bisam-%s_tau-%s.pdf", 
+                                     date, 
+                                     settings$suffix,
+                                     gets_lvl,
+                                     bisam_prior, 
+                                     ifelse(tau == "", "auto", tau))
+
+pdf(precision_file_individual, width = settings$pdf.width.single, height = settings$pdf.height.single)
 par(mfrow = c(1, 1))
 setup_plot()
 
@@ -649,8 +691,8 @@ plot(
   xlim = range(log10(sd_numeric)),
   ylim = c(0, 1),
   xlab = "Threshold Level (SD, log scale)",
-  ylab = "Performance Score",
-  main = "Precision and Recall",
+  ylab = "Precision",
+  main = "Precision",
   type = "n",
   axes = FALSE,
   xaxs = "i",
@@ -660,24 +702,19 @@ plot(
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
 lines(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
-      col = colors$ssvs, lwd = settings$lwd.line * 1.2, lty = 1)
+      col = colors$ssvs, lwd = settings$lwd.line * 1.2)
 points(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
        col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
 
 lines(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
-      col = colors$gets, lwd = settings$lwd.line * 1.2, lty = 1)
+      col = colors$gets, lwd = settings$lwd.line * 1.2)
 points(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
-      col = colors$ssvs, lwd = settings$lwd.line * 1.2, lty = 2)
-points(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
-       col = colors$ssvs, pch = 17, cex = settings$cex.point * 1.15)
-
-lines(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
-      col = colors$gets, lwd = settings$lwd.line * 1.2, lty = 2)
-points(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
-       col = colors$gets, pch = 17, cex = settings$cex.point * 1.15)
+lines(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+      col = colors$alasso, lwd = settings$lwd.line * 1.2)
+points(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+       col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
 
 add_clean_axes(
   at_x = log10(sd_numeric), 
@@ -686,11 +723,141 @@ add_clean_axes(
 )
 
 legend("bottomright", 
-       legend = c("BISAM Precision", "GETS Precision", 
-                  "BISAM Recall", "GETS Recall"),
-       col = c(colors$ssvs, colors$gets, colors$ssvs, colors$gets),
-       lty = c(1, 1, 2, 2),
-       pch = c(16, 16, 17, 17),
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
+       lty = 1,
+       pch = 16,
+       lwd = settings$lwd.line * 1.2,
+       bty = "n",
+       cex = settings$cex.legend * 1.15,
+       pt.cex = settings$cex.point)
+
+dev.off()
+
+# Individual plot for Recall
+recall_file_individual <- sprintf("./Simulations/%s/%s_recall_gets-%s_bisam-%s_tau-%s.pdf", 
+                                  date, 
+                                  settings$suffix,
+                                  gets_lvl,
+                                  bisam_prior, 
+                                  ifelse(tau == "", "auto", tau))
+
+pdf(recall_file_individual, width = settings$pdf.width.single, height = settings$pdf.height.single)
+par(mfrow = c(1, 1))
+setup_plot()
+
+plot(
+  x = log10(sd_numeric), 
+  y = NULL,
+  xlim = range(log10(sd_numeric)),
+  ylim = c(0, 1),
+  xlab = "Threshold Level (SD, log scale)",
+  ylab = "Recall (Sensitivity)",
+  main = "Recall",
+  type = "n",
+  axes = FALSE,
+  xaxs = "i",
+  yaxs = "i"
+)
+
+abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
+
+lines(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
+      col = colors$ssvs, lwd = settings$lwd.line * 1.2)
+points(log10(metrics$SD_num[ssvs_idx]), metrics$Recall[ssvs_idx], 
+       col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
+
+lines(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
+      col = colors$gets, lwd = settings$lwd.line * 1.2)
+points(log10(metrics$SD_num[gets_idx]), metrics$Recall[gets_idx], 
+       col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
+
+lines(log10(metrics$SD_num[alasso_idx]), metrics$Recall[alasso_idx], 
+      col = colors$alasso, lwd = settings$lwd.line * 1.2)
+points(log10(metrics$SD_num[alasso_idx]), metrics$Recall[alasso_idx], 
+       col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
+
+add_clean_axes(
+  at_x = log10(sd_numeric), 
+  labels_x = breaksize_labels,
+  at_y = seq(0, 1, 0.2)
+)
+
+legend("bottomright", 
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
+       lty = 1,
+       pch = 16,
+       lwd = settings$lwd.line * 1.2,
+       bty = "n",
+       cex = settings$cex.legend * 1.15,
+       pt.cex = settings$cex.point)
+
+dev.off()
+
+# Individual plot for Near Misses
+near_miss_file_individual <- sprintf("./Simulations/%s/%s_nearmiss_gets-%s_bisam-%s_tau-%s.pdf", 
+                                     date, 
+                                     settings$suffix,
+                                     gets_lvl,
+                                     bisam_prior, 
+                                     ifelse(tau == "", "auto", tau))
+
+pdf(near_miss_file_individual, width = settings$pdf.width.single, height = settings$pdf.height.single)
+par(mfrow = c(1, 1))
+setup_plot()
+
+# Calculate near-miss rates
+near_miss_ssvs <- summary_table["ssvs_1nn_fp", ]
+near_miss_gets <- summary_table["gets_1nn_fp", ]
+near_miss_alasso <- summary_table["alasso_1nn_fp", ]
+
+near_miss_prop_ssvs <- near_miss_ssvs / pmax(summary_table["fp.ssvs", ], 1)
+near_miss_prop_gets <- near_miss_gets / pmax(summary_table["fp.gets", ], 1)
+near_miss_prop_alasso <- near_miss_alasso / pmax(summary_table["fp.alasso", ], 1)
+
+plot(
+  x = log10(sd_numeric), 
+  y = NULL,
+  xlim = range(log10(sd_numeric)),
+  ylim = c(0, 1),
+  xlab = "Threshold Level (SD, log scale)",
+  ylab = "Proportion of False Positives",
+  main = "Near Misses (±1 Period from True Break)",
+  type = "n",
+  axes = FALSE,
+  xaxs = "i",
+  yaxs = "i"
+)
+
+abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
+
+lines(log10(sd_numeric), near_miss_prop_ssvs, 
+      col = colors$ssvs, lwd = settings$lwd.line * 1.2)
+points(log10(sd_numeric), near_miss_prop_ssvs, 
+       col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
+
+lines(log10(sd_numeric), near_miss_prop_gets, 
+      col = colors$gets, lwd = settings$lwd.line * 1.2)
+points(log10(sd_numeric), near_miss_prop_gets, 
+       col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
+
+lines(log10(sd_numeric), near_miss_prop_alasso, 
+      col = colors$alasso, lwd = settings$lwd.line * 1.2)
+points(log10(sd_numeric), near_miss_prop_alasso, 
+       col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
+
+add_clean_axes(
+  at_x = log10(sd_numeric), 
+  labels_x = breaksize_labels,
+  at_y = seq(0, 1, 0.2)
+)
+
+legend("topright", 
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
+       lty = 1,
+       pch = 16,
        lwd = settings$lwd.line * 1.2,
        bty = "n",
        cex = settings$cex.legend * 1.15,
@@ -729,6 +896,11 @@ lines(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx],
 points(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
 
+lines(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+      col = colors$alasso, lwd = settings$lwd.line * 1.2)
+points(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+       col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
+
 add_clean_axes(
   at_x = log10(sd_numeric), 
   labels_x = breaksize_labels,
@@ -736,8 +908,8 @@ add_clean_axes(
 )
 
 legend("bottomright", 
-       legend = c("BISAM", "GETS"),
-       col = c(colors$ssvs, colors$gets),
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
        lty = 1,
        lwd = settings$lwd.line * 1.2,
        pch = 16,
@@ -746,6 +918,82 @@ legend("bottomright",
        pt.cex = settings$cex.point)
 
 dev.off()
+
+# ==============================================================================
+# 10. CREATE ADDITIONAL COMPARISON PLOTS
+# ==============================================================================
+
+# Create a detailed comparison plot (Precision-Recall tradeoff)
+pr_tradeoff_file <- sprintf("./Simulations/%s/%s_pr_tradeoff_gets-%s_bisam-%s_tau-%s.pdf", 
+                            date, 
+                            settings$suffix,
+                            gets_lvl,
+                            bisam_prior, 
+                            ifelse(tau == "", "auto", tau))
+
+pdf(pr_tradeoff_file, width = settings$pdf.width.single, height = settings$pdf.height.single)
+par(mfrow = c(1, 1))
+setup_plot()
+
+plot(
+  metrics$Recall[ssvs_idx], 
+  metrics$Precision[ssvs_idx],
+  xlim = c(0, 1),
+  ylim = c(0, 1),
+  xlab = "Recall (Sensitivity)",
+  ylab = "Precision",
+  main = "Precision-Recall Trade-off",
+  type = "n",
+  axes = FALSE,
+  xaxs = "i",
+  yaxs = "i"
+)
+
+abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
+abline(v = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
+abline(0, 1, col = colors$gray, lty = 2, lwd = settings$lwd.axis)
+
+# Plot trajectories
+lines(metrics$Recall[ssvs_idx], metrics$Precision[ssvs_idx], 
+      col = colors$ssvs, lwd = settings$lwd.line * 1.2)
+points(metrics$Recall[ssvs_idx], metrics$Precision[ssvs_idx], 
+       col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
+
+lines(metrics$Recall[gets_idx], metrics$Precision[gets_idx], 
+      col = colors$gets, lwd = settings$lwd.line * 1.2)
+points(metrics$Recall[gets_idx], metrics$Precision[gets_idx], 
+       col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
+
+lines(metrics$Recall[alasso_idx], metrics$Precision[alasso_idx], 
+      col = colors$alasso, lwd = settings$lwd.line * 1.2)
+points(metrics$Recall[alasso_idx], metrics$Precision[alasso_idx], 
+       col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
+
+# Add labels for breaksize levels
+text(metrics$Recall[ssvs_idx], metrics$Precision[ssvs_idx], 
+     labels = breaksize_labels, pos = 3, cex = 0.7 * settings$cex.legend, 
+     col = colors$ssvs)
+
+add_clean_axes(
+  at_x = seq(0, 1, 0.2),
+  at_y = seq(0, 1, 0.2)
+)
+
+legend("bottomleft", 
+       legend = c("BISAM", "GETS", "ALASSO"),
+       col = c(colors$ssvs, colors$gets, colors$alasso),
+       lty = 1,
+       lwd = settings$lwd.line * 1.2,
+       pch = 16,
+       bty = "n",
+       cex = settings$cex.legend * 1.15,
+       pt.cex = settings$cex.point)
+
+dev.off()
+
+cat("\n\n=================================================================\n")
+cat("All plots have been saved successfully!\n")
+cat("=================================================================\n\n")
 
 # ==============================================================================
 # END OF SCRIPT
