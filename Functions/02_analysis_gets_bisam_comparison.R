@@ -519,8 +519,8 @@ plot(
 
 for (j in 1:length(sd_numeric)) {
   # BISAM (left)
-  rect(log10(sd_numeric[j]) - 2*bar_width - offset, 0,
-       log10(sd_numeric[j]) - bar_width - offset, summary_table["tr.ssvs", j],
+  rect(log10(sd_numeric[j]) - 1.5*bar_width - offset, 0,
+       log10(sd_numeric[j]) - 0.5*bar_width - offset, summary_table["tr.ssvs", j],
        col = colors$ssvs, border = NA)
   
   # GETS (middle)
@@ -529,8 +529,8 @@ for (j in 1:length(sd_numeric)) {
        col = colors$gets, border = NA)
   
   # ALASSO (right)
-  rect(log10(sd_numeric[j]) + bar_width + offset, 0,
-       log10(sd_numeric[j]) + 2*bar_width + offset, summary_table["tr.alasso", j],
+  rect(log10(sd_numeric[j]) + 0.5*bar_width + offset, 0,
+       log10(sd_numeric[j]) + 1.5*bar_width + offset, summary_table["tr.alasso", j],
        col = colors$alasso, border = NA)
 }
 
@@ -553,17 +553,25 @@ mtext("D", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, fo
 # ------------------------------------------------------------------------------
 setup_plot()
 
-y_vals_fp <- c(summary_table["fp.ssvs", ], summary_table["fp.gets", ],
-               summary_table["fp.alasso", ])
+y_vals_fp <- c(summary_table["fp.ssvs", ], summary_table["fp.gets", ])#, summary_table["fp.alasso", ])
 max_y_fp <- max(y_vals_fp)
+
+y1_min <- 0
+y1_max <- max_y_fp * 1.15          # left axis (BISAM/GETS)
+y2_min <- 0
+y2_max <- max(summary_table["fp.alasso", ])
+
+# map ALASSO values to left scale
+scale_to_left <- function(z) y1_min + (z - y2_min) * (y1_max - y1_min) / (y2_max - y2_min)
+alasso_scaled <- scale_to_left(summary_table["fp.alasso", ])
 
 plot(
   x = log10(sd_numeric), 
   y = NULL,
   xlim = range(log10(sd_numeric)) + c(-0.15, 0.15),
-  ylim = c(0, max_y_fp * 1.15),
+  ylim = c(y1_min, y1_max),
   xlab = "Threshold Level (SD, log scale)",
-  ylab = "Number of Breaks",
+  ylab = "Number of Breaks (BISAM/GETS)",
   main = "False Positives",
   type = "n",
   axes = FALSE,
@@ -573,8 +581,8 @@ plot(
 
 for (j in 1:length(sd_numeric)) {
   # BISAM (left)
-  rect(log10(sd_numeric[j]) - 2*bar_width - offset, 0,
-       log10(sd_numeric[j]) - bar_width - offset, summary_table["fp.ssvs", j],
+  rect(log10(sd_numeric[j]) - 1.5*bar_width - offset, 0,
+       log10(sd_numeric[j]) - 0.5*bar_width - offset, summary_table["fp.ssvs", j],
        col = colors$ssvs, border = NA)
   
   # GETS (middle)
@@ -582,16 +590,26 @@ for (j in 1:length(sd_numeric)) {
        log10(sd_numeric[j]) + bar_width/2, summary_table["fp.gets", j],
        col = colors$gets, border = NA)
   
-  # ALASSO (right)
-  rect(log10(sd_numeric[j]) + bar_width + offset, 0,
-       log10(sd_numeric[j]) + 2*bar_width + offset, summary_table["fp.alasso", j],
+  # ALASSO (right) – scaled to left axis
+  rect(log10(sd_numeric[j]) + 0.5*bar_width + offset, 0,
+       log10(sd_numeric[j]) + 1.5*bar_width + offset, alasso_scaled[j],
        col = colors$alasso, border = NA)
 }
 
+# left x and y axes as before
 add_clean_axes(
   at_x = log10(sd_numeric), 
   labels_x = breaksize_labels
 )
+
+# add right y-axis for ALASSO
+axis(
+  side = 4,
+  at = pretty(c(y1_min, y1_max)),
+  labels = round(y2_min + (pretty(c(y1_min, y1_max)) - y1_min) * (y2_max - y2_min)/(y1_max - y1_min)),
+  line = -2   # try 0, then -0.5, -1, ...
+)
+# mtext("Number of Breaks (ALASSO)", side = 4, line = 1.5)
 
 legend("topright", 
        legend = c("BISAM", "GETS", "ALASSO"),
@@ -600,7 +618,8 @@ legend("topright",
        bty = "n",
        cex = settings$cex.legend)
 
-mtext("E", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, font = 2, adj = 0)
+mtext("E", side = 3, line = 1.5, at = par("usr")[1],
+      cex = settings$cex.main, font = 2, adj = 0)
 
 # ------------------------------------------------------------------------------
 # Plot 6: Near Misses (1-Period Neighbor False Positives)
