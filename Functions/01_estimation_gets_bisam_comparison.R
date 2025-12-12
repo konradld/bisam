@@ -27,9 +27,10 @@ config <- expand.grid(
   sis_prior = c("imom"),
   gets_lvl = c(0.05,0.01),
   rel_effect = c(1, 1.5, 2, 3, 6, 10),
-  tau = c(4, "auto"),
+  tau = c(priorp2g(0.05, 1), priorp2g(0.01, 1)), # vary threshold?
   number_reps = 1:100,
-  date = "2025-11-18_sparse",
+  setup = "sparse",
+  date = "2025-12-12",
   stringsAsFactors = FALSE
 )
 conf <- config[run_numeric,]
@@ -66,8 +67,15 @@ STEP_MEAN_REL <- conf$rel_effect    # relative mean of size of stepshift in erro
 # Break positions
 POS_OUTL <- 0
 
-# Sample random breaks in the first N_STEPS observations
-N_STEPS <- c(1:4)
+# Sample random breaks in the N_STEPS observations
+if(conf$setup == "sparse") {
+  N_STEPS <- c(1:4) # sparse
+} else if (conf$setup == "dense") {
+  N_STEPS <- c(1:8, 2, 4, 6, 8) # dense
+} else {
+  stop("Simulation setup not available.")
+}
+
 POS_STEP_IN_Z <- sapply(N_STEPS, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
 POS_STEP <- POS_STEP_IN_Z + 2 * (N_STEPS) + ((N_STEPS) - 1)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
