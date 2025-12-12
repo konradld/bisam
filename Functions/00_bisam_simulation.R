@@ -269,7 +269,6 @@ if (DO_AUTO_STEP_INCL_PRIOR) {
   }
   y_tilde <- round(solve(crossprod(Z)),10) %*% t(Z) %*% ((mod$data$y - mod$data$X %*% mod$coefs$beta) / s2_hat_vec)
   STEP_INCL_PROB <- EbayesThresh::wfromx(y_tilde, prior = "cauchy")
-  EbayesThresh::Eb
   DO_TWOSTAGE <- TRUE
 }
 
