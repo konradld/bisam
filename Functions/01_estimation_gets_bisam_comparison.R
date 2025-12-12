@@ -208,7 +208,7 @@ DO_GEWEKE_TEST <- FALSE
 
 if(conf$tau == "auto") {
   if (PRIOR == "imom") {
-    TAU <- priorp2g(1/12, STEP_MEAN_REL, nu = 1, prior = "iMom")
+    TAU <- priorp2g(0.05, STEP_MEAN_REL, nu = 1, prior = "iMom")
   } else if (PRIOR == "mom") {
     TAU <- STEP_MEAN_REL^2 / 2
   } else {
@@ -351,10 +351,10 @@ break_comparison[,15] <- (all_t3+break_comparison[,1])== 2
 #===============================================================================
 
 if (is_slurm) {
-  dir.create(sprintf("./results/%s/", conf$date), showWarnings = FALSE)
+  dir.create(sprintf("./results/%s_%s/", conf$date, conf$setup), showWarnings = FALSE)
   
-  folder_path <- sprintf("./results/%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
-                         conf$date, conf$gets_lvl, conf$sis_prior, conf$tau)
+  folder_path <- sprintf("./results/%s_%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
+                         conf$date, conf$setup, conf$gets_lvl, conf$sis_prior, conf$tau)
 } else {
   folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
                           conf$gets_lvl, conf$sis_prior, conf$tau)
