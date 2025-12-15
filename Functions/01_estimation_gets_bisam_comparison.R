@@ -25,14 +25,24 @@ library(mombf)
 
 config <- expand.grid(
   sis_prior = c("imom"),
-  gets_lvl = c(0.05,0.01),
-  rel_effect = c(1, 1.5, 2, 3, 6, 10),
-  tau = c(priorp2g(0.05, 1), priorp2g(0.01, 1)), # vary threshold?
+  gets_lvl = c(0.01, 0.05),
+  rel_effect = c(0.5, 0.75, 1, 2, 5, 10),
+  tau = c(4, "auto"),
   number_reps = 1:100,
-  setup = "sparse",
-  date = "2025-12-12",
+  date = "2025-12-09_pat_test",
   stringsAsFactors = FALSE
 )
+
+config <- expand.grid(
+  sis_prior = c("imom"),
+  gets_lvl = c(0.01, 0.05),
+  rel_effect = c(0.5, 0.75, 1, 2, 3, 5),
+  tau = c("auto"),
+  number_reps = 1:100,
+  date = "2025-12-11_test",
+  stringsAsFactors = FALSE
+)
+
 conf <- config[run_numeric,]
 
 # ==============================================================================
@@ -67,15 +77,8 @@ STEP_MEAN_REL <- conf$rel_effect    # relative mean of size of stepshift in erro
 # Break positions
 POS_OUTL <- 0
 
-# Sample random breaks in the N_STEPS observations
-if(conf$setup == "sparse") {
-  N_STEPS <- c(1:4) # sparse
-} else if (conf$setup == "dense") {
-  N_STEPS <- c(1:8, 2, 4, 6, 8) # dense
-} else {
-  stop("Simulation setup not available.")
-}
-
+# Sample random breaks in the first N_STEPS observations
+N_STEPS <- c(1:4)
 POS_STEP_IN_Z <- sapply(N_STEPS, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
 POS_STEP <- POS_STEP_IN_Z + 2 * (N_STEPS) + ((N_STEPS) - 1)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
@@ -208,7 +211,7 @@ DO_GEWEKE_TEST <- FALSE
 
 if(conf$tau == "auto") {
   if (PRIOR == "imom") {
-    TAU <- priorp2g(0.05, STEP_MEAN_REL, nu = 1, prior = "iMom")
+    TAU <- priorp2g(1/12, STEP_MEAN_REL, nu = 1, prior = "iMom")
   } else if (PRIOR == "mom") {
     TAU <- STEP_MEAN_REL^2 / 2
   } else {
@@ -351,12 +354,12 @@ break_comparison[,15] <- (all_t3+break_comparison[,1])== 2
 #===============================================================================
 
 if (is_slurm) {
-  dir.create(sprintf("./results/%s_%s/", conf$date, conf$setup), showWarnings = FALSE)
+  dir.create(sprintf("./results/%s/", conf$date), showWarnings = FALSE)
   
-  folder_path <- sprintf("./results/%s_%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
-                         conf$date, conf$setup, conf$gets_lvl, conf$sis_prior, conf$tau)
+  folder_path <- sprintf("./results/%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
+                         conf$date, conf$gets_lvl, conf$sis_prior, conf$tau)
 } else {
-  folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
+  folder_path <- sprintf("./Simulations/2025-12-09_pat_test/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
                           conf$gets_lvl, conf$sis_prior, conf$tau)
 }
 

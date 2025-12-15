@@ -47,7 +47,8 @@ STEP_SD <- 0.00         # variance of size of stepshift
 # Break positions
 POS_OUTL <- 0
 # POS_STEP <- c(43, 108, 169, 221)
-POS_STEP <- c(7, 22, 43, 80, 108, 115, 127, 144, 169, 190, 200, 221)
+#POS_STEP <- c(7, 22, 43, 80, 108, 115, 127, 144, 169, 190, 200, 221)
+POS_STEP <- c(10, 40, 70, 100, 130)
 
 POS_STEP_IN_Z <- POS_STEP - 2 * (POS_STEP %/% Nt + 1) - (POS_STEP %/% Nt)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
@@ -151,7 +152,7 @@ SIGMA2_SHAPE <- NULL
 SIGMA2_RATE <- NULL
 SIGMA2_HYPER_P <- 0.90
 
-STEP_INCL_PROB <- 0.5
+STEP_INCL_PROB <- 0.5 # controls the excess noise, can be lowered (e.g. 0.3)
 STEP_INCL_ALPHA <- 1
 STEP_INCL_BETA <- 1
 
@@ -309,7 +310,7 @@ COL_FIT <- "#1B9E77"     # Teal
 COL_GRID <- "gray70"
 
 
-# pdf("./Simulations/sim_setup_dense.pdf", width = 16, height = 9)
+#pdf("./Plots/sim_setup_small_breaks.pdf", width = 16, height = 9)
 
 # Set up plotting parameters
 par(
@@ -364,12 +365,13 @@ abline(v = POS_STEP, lty = 2, col = COL_STEP, lwd = 1)
 # Legend
 legend(
   "topright", 
+  inset = c(0.01, 0.01),
   legend = c("PIP", "True Breaks"),
   col = c(COL_MAIN, COL_STEP),
   lty = c(1, 2),
   lwd = c(2, 1.5),
   bty = "n",
-  cex = 0.85
+  cex = 0.3
 )
 
 mtext(
@@ -429,6 +431,7 @@ for (start in seq(1, n_fit, by = 30)) {
 # Legend
 legend(
   "topright",
+  inset = c(0.01, 0.01),
   legend = c("Observed", "True Mean", "BISAM-fit", "True Breaks"),
   col = c(
     adjustcolor(COL_MAIN, alpha.f = 0.9),
@@ -440,7 +443,7 @@ legend(
   lty = c(NA, 1, 1, 2),
   lwd = c(NA, 2, 2, 1.5),
   bty = "n",
-  cex = 0.85,
+  cex = 0.3,
   bg = "white"
 )
 
@@ -481,4 +484,6 @@ title(
   font.main = 2
 )
 
-# dev.off()
+#dev.off()
+
+
