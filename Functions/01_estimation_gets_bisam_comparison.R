@@ -498,7 +498,7 @@ if (is_slurm) {
   folder_path <- sprintf("./results/%s_%s/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
                          conf$date, conf$setup, conf$gets_lvl, conf$sis_prior, conf$tau)
 } else {
-  folder_path <- sprintf("./Simulations/gets_bisam_alasso_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
+  folder_path <- sprintf("./Simulations/gets_bisam_comparison_gets-%0.2f_bisam_prior-%s_tau-%s/",
                          conf$gets_lvl, conf$sis_prior, conf$tau)
 }
 
