@@ -25,19 +25,20 @@ PLOT_MODE <- "slide"  # Change to "publication" for journal-style plots
 # Load required libraries (only for data manipulation)
 library(dplyr)
 
-date <- "2025-12-12_sparse"
+date <- "2025-12-15_sparse"
 gets_lvl <- "0.01"
 bisam_prior <- "imom"
 tau <- "1.92072941034706"
+tau <- "3.31744830051061"
 
 # Set up paths
 if(tau == "") {
-  data_path <- sprintf("./Simulations/%s/gets_bisam_alasso_comparison_gets-%s_bisam_prior-%s/", 
+  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s/", 
                        date, 
                        gets_lvl,
                        bisam_prior)
 } else {
-  data_path <- sprintf("./Simulations/%s/gets_bisam_alasso_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
+  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
                        date, 
                        gets_lvl,
                        bisam_prior,
@@ -449,8 +450,8 @@ fp_rate_gets <- summary_table["fp.gets", ] / summary_table["true", ]
 fp_rate_alasso <- summary_table["fp.alasso", ] / summary_table["true", ]
 
 # Determine y-axis range
-all_rates <- c(tp_rate_ssvs, tp_rate_gets, tp_rate_alasso,
-               fp_rate_ssvs, fp_rate_gets, fp_rate_alasso)
+all_rates <- c(tp_rate_ssvs, tp_rate_gets, #tp_rate_alasso,
+               fp_rate_ssvs, fp_rate_gets) #, fp_rate_alasso)
 ylim_max <- max(all_rates) * 1.1
 
 plot(
