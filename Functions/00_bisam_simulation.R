@@ -14,18 +14,21 @@ set.seed(12345)
 # Prior specification
 PRIOR <- "imom"
 
+# Estimate Prior Inclusion Probability
+DO_AUTO_STEP_INCL_PRIOR <- FALSE
+
 # Twostage Estimation?
 DO_TWOSTAGE <- FALSE
 
 # Data dimensions
-Ni <- 10          # number of sim. observations
-Nt <- 30          # number of sim. time periods
+Ni <- 5           # number of sim. observations
+Nt <- 300         # number of sim. time periods
 NX <- 0           # number of regressors
 
 # Model structure
 DO_CONST <- FALSE    # inclusion of a constant
 DO_INDIV_FE <- TRUE     # inclusion of indiv. fixed effects
-DO_TIME_FE <- TRUE     # inclusion of time fixed effects
+DO_TIME_FE <- FALSE     # inclusion of time fixed effects
 DO_OUTLIERS <- FALSE      # inclusion of indicator saturation
 DO_STEP_SATURATION <- TRUE      # inclusion of stepshift saturation
 
@@ -41,18 +44,24 @@ OUTL_MEAN <- 0   # mean of size of outlier
 OUTL_SD <- 0     # variance of size of outlier
 
 # Stepshift characteristics
-STEP_MEAN_REL <- 0.5      # relative mean of size of stepshift in error.sd
+STEP_MEAN_REL <- 3      # relative mean of size of stepshift in error.sd
 STEP_SD <- 0.00         # variance of size of stepshift
 
 # Break positions
 POS_OUTL <- 0
 # POS_STEP <- c(43, 108, 169, 221)
-#POS_STEP <- c(7, 22, 43, 80, 108, 115, 127, 144, 169, 190, 200, 221)
-POS_STEP <- c(7, 8, 9, 10, 22, 43, 80, 108, 115, 127, 144, 169)
+POS_STEP <- c(7, 22, 43, 80, 108, 115, 127, 144, 169, 190, 200, 221)
 
-POS_STEP_IN_Z <- POS_STEP - 2 * (POS_STEP %/% Nt + 1) - (POS_STEP %/% Nt)
-STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
-S2_TRUE <- ERROR_SD^2
+# check if breakposition is allowed
+non_admissible_breaks <- POS_STEP %in% outer(0:(Ni-1) * Nt, c(1, Nt-1, Nt), "+")
+if(any(non_admissible_breaks)) {
+  warning(sprintf("Warning: Step position %d is not admissible and thus ignored!\n", POS_STEP[non_admissible_breaks]))
+  POS_STEP <- POS_STEP[!non_admissible_breaks] # exclude non-admissible break locations
+}
+
+pos_step_in_z <- POS_STEP - 2 * (POS_STEP %/% Nt + 1) - (POS_STEP %/% Nt)
+step_mean_abs <- STEP_MEAN_REL * ERROR_SD
+# s2_true <- ERROR_SD^2
 
 # ==============================================================================
 # DATA SIMULATION
@@ -72,7 +81,7 @@ sim <- contr_sim_breaks(
   pos.outl = POS_OUTL, 
   pos.step = POS_STEP,
   outl.mean = OUTL_MEAN, 
-  step.mean = STEP_MEAN_ABS,
+  step.mean = step_mean_abs,
   error.sd = ERROR_SD
 )
 
@@ -102,9 +111,9 @@ make_Z <- function(n, t, i_index = 1, t_index = 2) {
 data <- sim$data
 y <- data[, 3]
 Z <- make_Z(Ni, Nt)
-true_fit <- lm(y ~ Z[, POS_STEP_IN_Z])
+true_fit <- lm(y ~ Z[, pos_step_in_z])
 
-df <- cbind(as.data.frame(data), as.data.frame(Z[, POS_STEP_IN_Z]))
+df <- cbind(as.data.frame(data), as.data.frame(Z[, pos_step_in_z]))
 names(df) <- c("n","t","y", paste0("x",1:length(POS_STEP)))
 if (DO_INDIV_FE & DO_TIME_FE) {
   true_fit <- fixest::feols(as.formula(paste0("y~", paste0("x", 1:length(POS_STEP), collapse = "+"), "| n + t")) , data = df)
@@ -142,7 +151,7 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 2000L
+NDRAW <- 3000L
 NBURN <- 500L
 
 # Prior settings
@@ -164,7 +173,7 @@ STEP_INCL_PRIOR <- "bern"
 # Advanced options
 DO_SPLIT_Z <- TRUE
 DO_CLUSTER_S2 <- TRUE
-DO_CHECK_OUTLIER <- TRUE
+DO_CHECK_OUTLIER <- FALSE
 # Outlier detection options
 OUTLIER_INCL_ALPHA <- 1
 OUTLIER_INCL_BETA <- 10
@@ -180,6 +189,7 @@ DO_GEWEKE_TEST <- FALSE
 
 source("./Functions/estimate_bisam_fun.R")
 
+# Assign all values explicitly for debugging
 data = data
 do_constant = DO_CONST
 do_individual_fe = DO_INDIV_FE
@@ -251,10 +261,21 @@ mod <- estimate_bisam(
   do_geweke_test = DO_GEWEKE_TEST
 )
 
+if (DO_AUTO_STEP_INCL_PRIOR) {
+  if (DO_CLUSTER_S2) {
+    s2_hat_vec <- rep(mod$coefs$sigma2, each = Nt)
+  } else {
+    s2_hat_vec <- rep(mod$coefs$sigma2, times = Ni * Nt)
+  }
+  y_tilde <- round(solve(crossprod(Z)),10) %*% t(Z) %*% ((mod$data$y - mod$data$X %*% mod$coefs$beta) / s2_hat_vec)
+  STEP_INCL_PROB <- EbayesThresh::wfromx(y_tilde, prior = "cauchy")
+  DO_TWOSTAGE <- TRUE
+}
+
 if (DO_TWOSTAGE) {
-  pip <- mod$coefs$omega
-  pip_q80 <- quantile(pip[pip > 0], 0.5)
-  steps_to_check = which(pip > pip_q80)
+  # pip <- mod$coefs$omega
+  # pip_q80 <- quantile(pip[pip > 0], 0.5)
+  # steps_to_check = which(pip > pip_q80)
   
   mod <- estimate_bisam(
     data = data,
@@ -310,7 +331,7 @@ COL_FIT <- "#1B9E77"     # Teal
 COL_GRID <- "gray70"
 
 
-#pdf("./Plots/sim_setup_small_breaks.pdf", width = 16, height = 9)
+# pdf("./Simulations/sim_setup_dense.pdf", width = 16, height = 9)
 
 # Set up plotting parameters
 par(
@@ -328,7 +349,7 @@ par(
 omega_with_breaks <- mod$coefs$omega
 country_boundaries_a <- (1:(n_mod - 1)) * (t_mod - 3)
 
-omega_plot <- rep(NA, length(data[, 3]))
+omega_plot <- rep(NA, length(data[, y_index]))
 current_pos <- 1
 for(i in 1:n_mod) {
   start_idx <- (i-1) * (t_mod) + 3
@@ -365,13 +386,12 @@ abline(v = POS_STEP, lty = 2, col = COL_STEP, lwd = 1)
 # Legend
 legend(
   "topright", 
-  inset = c(0.01, 0.01),
   legend = c("PIP", "True Breaks"),
   col = c(COL_MAIN, COL_STEP),
   lty = c(1, 2),
   lwd = c(2, 1.5),
   bty = "n",
-  cex = 0.3
+  cex = 0.85
 )
 
 mtext(
@@ -417,21 +437,20 @@ plot(
 abline(v = 0:Ni * Nt, lty = 2, col = COL_GRID, lwd = 0.8)
 abline(v = POS_STEP, col = COL_STEP, lty = 2, lwd = 1.5)
 # abline(h = sim$true.const, lty = 3, col = COL_GRID, lwd = 0.8)
-# abline(h = sim$true.const + STEP_MEAN_ABS, lty = 3, col = COL_GRID, lwd = 0.8)
+# abline(h = sim$true.const + step_mean_abs, lty = 3, col = COL_GRID, lwd = 0.8)
 
 # Fitted lines with breaks every 30th value
 n_fit <- length(true_fit$fitted.values)
 
-for (start in seq(1, n_fit, by = 30)) {
-  end <- min(start + 29, n_fit)
+for (start in seq(1, n_fit, by = Nt)) {
+  end <- min(start + Nt-1, n_fit)
   lines(start:end, true_fit$fitted.values[start:end], col = scales::alpha(COL_STEP, 0.75), lwd = 2)
-  lines(start:end, mod$fitted[start:end],            col = scales::alpha(COL_FIT, 0.75), lwd = 2)
+  lines(start:end, mod$fitted[start:end], col = scales::alpha(COL_FIT, 0.75), lwd = 2)
 }
 
 # Legend
 legend(
   "topright",
-  inset = c(0.01, 0.01),
   legend = c("Observed", "True Mean", "BISAM-fit", "True Breaks"),
   col = c(
     adjustcolor(COL_MAIN, alpha.f = 0.9),
@@ -443,7 +462,7 @@ legend(
   lty = c(NA, 1, 1, 2),
   lwd = c(NA, 2, 2, 1.5),
   bty = "n",
-  cex = 0.3,
+  cex = 0.85,
   bg = "white"
 )
 
@@ -484,6 +503,4 @@ title(
   font.main = 2
 )
 
-#dev.off()
-
-
+# dev.off()
