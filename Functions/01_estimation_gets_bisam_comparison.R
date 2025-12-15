@@ -25,13 +25,24 @@ library(mombf)
 
 config <- expand.grid(
   sis_prior = c("imom"),
-  gets_lvl = c(0.05,0.01),
-  rel_effect = c(0.5, 1, 1.5, 2, 5, 10),
+  gets_lvl = c(0.01, 0.05),
+  rel_effect = c(0.5, 0.75, 1, 2, 5, 10),
   tau = c(4, "auto"),
   number_reps = 1:100,
   date = "2025-12-09_pat_test",
   stringsAsFactors = FALSE
 )
+
+config <- expand.grid(
+  sis_prior = c("imom"),
+  gets_lvl = c(0.01, 0.05),
+  rel_effect = c(0.5, 0.75, 1, 2, 3, 5),
+  tau = c("auto"),
+  number_reps = 1:100,
+  date = "2025-12-11_test",
+  stringsAsFactors = FALSE
+)
+
 conf <- config[run_numeric,]
 
 # ==============================================================================

@@ -41,14 +41,14 @@ OUTL_MEAN <- 0   # mean of size of outlier
 OUTL_SD <- 0     # variance of size of outlier
 
 # Stepshift characteristics
-STEP_MEAN_REL <- 0.5      # relative mean of size of stepshift in error.sd
+STEP_MEAN_REL <- 3      # relative mean of size of stepshift in error.sd
 STEP_SD <- 0.00         # variance of size of stepshift
 
 # Break positions
 POS_OUTL <- 0
 # POS_STEP <- c(43, 108, 169, 221)
 #POS_STEP <- c(7, 22, 43, 80, 108, 115, 127, 144, 169, 190, 200, 221)
-POS_STEP <- c(7, 8, 9, 10, 22, 43, 80, 108, 115, 127, 144, 169)
+POS_STEP <- c(10, 40, 70, 100, 130)
 
 POS_STEP_IN_Z <- POS_STEP - 2 * (POS_STEP %/% Nt + 1) - (POS_STEP %/% Nt)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
@@ -152,7 +152,7 @@ SIGMA2_SHAPE <- NULL
 SIGMA2_RATE <- NULL
 SIGMA2_HYPER_P <- 0.90
 
-STEP_INCL_PROB <- 0.5
+STEP_INCL_PROB <- 0.5 # controls the excess noise, can be lowered (e.g. 0.3)
 STEP_INCL_ALPHA <- 1
 STEP_INCL_BETA <- 1
 
