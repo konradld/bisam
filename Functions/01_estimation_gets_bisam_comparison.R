@@ -30,8 +30,8 @@ config <- expand.grid(
   rel_effect = c(2, 3, 5),
   tau = c(priorp2g(0.05, 1), priorp2g(0.01, 1)), # vary threshold?
   number_reps = 1:100,
-  setup = 1:20,
-  date = "2026-01-21",
+  setup = c(1:20),
+  date = "2026-01-23",
   stringsAsFactors = FALSE
 )
 conf <- config[run_numeric,]
@@ -79,7 +79,12 @@ if(conf$setup == "sparse") {
   stop("Simulation setup not available.")
 }
 
-POS_STEP_IN_Z <- sapply(N_STEPS, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
+chk <- TRUE
+while(chk) {
+  POS_STEP_IN_Z <- sapply(N_STEPS, \(x) sample(1:(Nt - 3) + (x - 1) * (Nt - 3), 1))
+  if(!any(duplicated(POS_STEP_IN_Z))) chk <- FALSE
+}
+
 POS_STEP <- POS_STEP_IN_Z + 2 * (N_STEPS) + ((N_STEPS) - 1)
 STEP_MEAN_ABS <- STEP_MEAN_REL * ERROR_SD
 S2_TRUE <- ERROR_SD^2
@@ -89,9 +94,9 @@ S2_TRUE <- ERROR_SD^2
 # ==============================================================================
 
 if (is_slurm) {
-  source("./code/contr_sim_breaks_fun.R")
-  source("./code/estimate_bisam_fun.R")
-  source("./code/pip_window_fun.R")
+  source("../code/contr_sim_breaks_fun.R")
+  source("../code/estimate_bisam_fun.R")
+  source("../code/pip_window_fun.R")
 } else {
   source("./Functions/contr_sim_breaks_fun.R")
   source("./Functions/estimate_bisam_fun.R")
