@@ -16,7 +16,7 @@ rm(list = ls())
 # ==============================================================================
 
 # SET THIS TO EITHER "publication" OR "slide"
-PLOT_MODE <- "publication"  # Change to "publication" for journal-style plots
+PLOT_MODE <- "slide"  # Change to "publication" for journal-style plots
 
 # ==============================================================================
 # 1. SETUP AND DATA LOADING
@@ -25,12 +25,15 @@ PLOT_MODE <- "publication"  # Change to "publication" for journal-style plots
 # Load required libraries (only for data manipulation)
 library(dplyr)
 
-date <- "2026-01-23_SD"
-gets_lvl <- "0.05"
+date <- "2026-01-23_BN"
+gets_lvl <- "0.01"
 bisam_prior <- "imom"
-tau <- "1.92072941034706"
-# tau <- "3.31744830051061"
-setting <- "dense"
+# tau <- "1.92072941034706"
+tau <- "3.31744830051061"
+
+# break SD to consider
+breaksize_slct <- 5
+
 
 # Set up paths
 if(tau == "") {
@@ -73,8 +76,9 @@ combined_data <- lapply(file_list, function(file) {
   # Extract metadata from filename
   filename <- basename(file)
   breaksize <- as.numeric(sub(".*breaksize-([0-9.]+)SD_breaknumber.*", "\\1", filename))
-  breaknumber <- sub(".*breaknumber-([a-z]+)_rep.*", "\\1", filename)
+  breaknumber <- as.numeric(sub(".*breaknumber-([0-9.]+)_rep.*", "\\1", filename))
   replicate <- as.integer(sub(".*_rep([0-9]+)\\.RDS", "\\1", filename))
+
   
   # Convert to data frame with identifiers
   df <- as.data.frame(mat)
@@ -87,31 +91,32 @@ combined_data <- lapply(file_list, function(file) {
 }) |> 
   bind_rows()
 
-combined_data <- combined_data |> filter(breaknumber == setting)
 
+combined_data <- combined_data |> 
+  filter(breaksize == breaksize_slct)
 
 # ==============================================================================
 # 3. SUMMARY STATISTICS
 # ==============================================================================
 
-# Get unique breaksizes and sort them
-breaksize_vals <- combined_data$breaksize |> unique() |> sort()
+# Get unique breaknumbers and sort them
+breaknumber_vals <- combined_data$breaknumber |> unique() |> sort()
 
-# Calculate summary table for each breaksize
-summary_table <- sapply(breaksize_vals, function(bs) {
+# Calculate summary table for each breaknumber
+summary_table <- sapply(breaknumber_vals, function(bn) {
   data_subset <- combined_data |>
-    filter(breaksize == bs)
+    filter(breaknumber == bn)
   
   # Sum across all replicates
   summary_stats <- data_subset |>
-    dplyr::select(-row_name, -breaksize, -replicate, -breaknumber) |> 
+    dplyr::select(-row_name, -breaksize, -breaknumber, -replicate) |> 
     colSums()
   
   return(summary_stats)
 })
 
 # Set column names
-colnames(summary_table) <- sprintf("%.1fSD", breaksize_vals)
+colnames(summary_table) <- sprintf("%.0f", breaknumber_vals)
 
 # Display summary table
 cat("\n\nSummary Table:\n")
@@ -122,14 +127,14 @@ print(summary_table)
 # ==============================================================================
 
 # Define threshold levels
-breaksize_labels <- colnames(summary_table)
-sd_numeric <- as.numeric(stringr::str_extract(breaksize_labels, "\\d+\\.\\d(?=SD)"))
+breaknumber_labels <- colnames(summary_table)
+bn_numeric <- as.numeric(breaknumber_labels)
 
 # Initialize metrics data frame for all three methods
 metrics <- data.frame(
-  SD = rep(breaksize_labels, 3),
-  SD_num = rep(sd_numeric, 3),
-  Method = rep(c("BISAM", "GETS", "ALASSO"), each = length(breaksize_vals)),
+  BN = rep(breaknumber_labels, 3),
+  BN_num = rep(bn_numeric, 3),
+  Method = rep(c("BISAM", "GETS", "ALASSO"), each = length(breaknumber_vals)),
   TP = c(summary_table["tr.ssvs", ], 
          summary_table["tr.gets", ],
          summary_table["tr.alasso", ]),
@@ -291,36 +296,36 @@ add_clean_axes <- function(side = 1:2, at_x = NULL, labels_x = NULL,
 
 # Output file names
 if(tau == "") {
-  multi_panel_file <- sprintf("./Simulations/%s/%s_multi_gets-%s_bisam-%s_tau-%s_%s_%s.pdf", 
+  multi_panel_file <- sprintf("./Simulations/%s/%s_multi-breaks-SD%s_gets-%s_bisam-%s_tau-%s_%s.pdf", 
                               date, 
                               settings$suffix,
+                              breaksize_slct,
                               gets_lvl,
                               bisam_prior, 
-                              "auto", 
-                              setting)
-  f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s_%s_%s.pdf", 
+                              "auto")
+  f1_score_file <- sprintf("./Simulations/%s/%s_f1-breaks-SD%s_gets-%s_bisam-%s_tau-%s_%s.pdf", 
                            date, 
                            settings$suffix,
+                           breaksize_slct,
                            gets_lvl,
                            bisam_prior, 
-                           "auto", 
-                           setting)
+                           "auto")
   
 } else {
-  multi_panel_file <- sprintf("./Simulations/%s/%s_multi_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+  multi_panel_file <- sprintf("./Simulations/%s/%s_multi-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                               date, 
                               settings$suffix,
+                              breaksize_slct,
                               gets_lvl,
                               bisam_prior, 
-                              tau, 
-                              setting)
-  f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+                              tau)
+  f1_score_file <- sprintf("./Simulations/%s/%s_f1-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                            date, 
                            settings$suffix,
+                           breaksize_slct,
                            gets_lvl,
                            bisam_prior, 
-                           tau, 
-                           setting)
+                           tau)
 }
 
 # Open PDF for multi-panel plot
@@ -340,11 +345,11 @@ alasso_idx <- metrics$Method == "ALASSO"
 setup_plot()
 
 plot(
-  x = log10(sd_numeric), 
+  x = (bn_numeric), 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range((bn_numeric)),
   ylim = c(0, 1),
-  xlab = "Threshold Level (SD, log scale)",
+  xlab = "Number of breaks",
   ylab = "Precision",
   main = "Precision",
   type = "n",
@@ -357,24 +362,24 @@ plot(
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
 # Plot Precision
-lines(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
+lines((metrics$BN_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
       col = colors$ssvs, lwd = settings$lwd.line)
-points(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
+points((metrics$BN_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
        col = colors$ssvs, pch = 16, cex = settings$cex.point)
 
-lines(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
+lines((metrics$BN_num[gets_idx]), metrics$Precision[gets_idx], 
       col = colors$gets, lwd = settings$lwd.line)
-points(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
+points((metrics$BN_num[gets_idx]), metrics$Precision[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point)
 
-lines(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+lines((metrics$BN_num[alasso_idx]), metrics$Precision[alasso_idx], 
       col = colors$alasso, lwd = settings$lwd.line)
-points(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+points((metrics$BN_num[alasso_idx]), metrics$Precision[alasso_idx], 
        col = colors$alasso, pch = 16, cex = settings$cex.point)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = (bn_numeric), 
+  labels_x = breaknumber_labels,
   at_y = seq(0, 1, 0.2)
 )
 
@@ -397,11 +402,11 @@ mtext("A", side = 3, line = 1.5, at = par("usr")[1], cex = settings$cex.main, fo
 setup_plot()
 
 plot(
-  x = log10(sd_numeric), 
+  x = (bn_numeric), 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range((bn_numeric)),
   ylim = c(0, 1),
-  xlab = "Threshold Level (SD, log scale)",
+  xlab = "Number of breaks",
   ylab = "F1 Score",
   main = "F1 Score",
   type = "n",
@@ -412,24 +417,24 @@ plot(
 
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
-lines(log10(metrics$SD_num[ssvs_idx]), metrics$F1[ssvs_idx], 
+lines((metrics$BN_num[ssvs_idx]), metrics$F1[ssvs_idx], 
       col = colors$ssvs, lwd = settings$lwd.line)
-points(log10(metrics$SD_num[ssvs_idx]), metrics$F1[ssvs_idx], 
+points((metrics$BN_num[ssvs_idx]), metrics$F1[ssvs_idx], 
        col = colors$ssvs, pch = 16, cex = settings$cex.point)
 
-lines(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx], 
+lines((metrics$BN_num[gets_idx]), metrics$F1[gets_idx], 
       col = colors$gets, lwd = settings$lwd.line)
-points(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx], 
+points((metrics$BN_num[gets_idx]), metrics$F1[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point)
 
-lines(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+lines((metrics$BN_num[alasso_idx]), metrics$F1[alasso_idx], 
       col = colors$alasso, lwd = settings$lwd.line)
-points(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+points((metrics$BN_num[alasso_idx]), metrics$F1[alasso_idx], 
        col = colors$alasso, pch = 16, cex = settings$cex.point)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = (bn_numeric), 
+  labels_x = breaknumber_labels,
   at_y = seq(0, 1, 0.2)
 )
 
@@ -465,11 +470,11 @@ all_rates <- c(tp_rate_ssvs, tp_rate_gets, #tp_rate_alasso,
 ylim_max <- max(all_rates) * 1.1
 
 plot(
-  x = log10(sd_numeric), 
+  x = (bn_numeric), 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range((bn_numeric)),
   ylim = c(0, ylim_max),
-  xlab = "Threshold Level (SD, log scale)",
+  xlab = "Number of breaks",
   ylab = "Rate (relative to true breaks)",
   main = "True and False Positive Rates",
   type = "n",
@@ -484,40 +489,40 @@ abline(h = y_ticks, col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 abline(h = 1, col = colors$gray, lty = 2, lwd = settings$lwd.axis)
 
 # Plot True Positive Rates (solid lines)
-lines(log10(sd_numeric), tp_rate_ssvs, 
+lines((bn_numeric), tp_rate_ssvs, 
       col = colors$ssvs, lwd = settings$lwd.line, lty = 1)
-points(log10(sd_numeric), tp_rate_ssvs, 
+points((bn_numeric), tp_rate_ssvs, 
        col = colors$ssvs, pch = 16, cex = settings$cex.point)
 
-lines(log10(sd_numeric), tp_rate_gets, 
+lines((bn_numeric), tp_rate_gets, 
       col = colors$gets, lwd = settings$lwd.line, lty = 1)
-points(log10(sd_numeric), tp_rate_gets, 
+points((bn_numeric), tp_rate_gets, 
        col = colors$gets, pch = 16, cex = settings$cex.point)
 
-lines(log10(sd_numeric), tp_rate_alasso, 
+lines((bn_numeric), tp_rate_alasso, 
       col = colors$alasso, lwd = settings$lwd.line, lty = 1)
-points(log10(sd_numeric), tp_rate_alasso, 
+points((bn_numeric), tp_rate_alasso, 
        col = colors$alasso, pch = 16, cex = settings$cex.point)
 
 # Plot False Positive Rates (dashed lines)
-lines(log10(sd_numeric), fp_rate_ssvs, 
+lines((bn_numeric), fp_rate_ssvs, 
       col = colors$ssvs, lwd = settings$lwd.line, lty = 2)
-points(log10(sd_numeric), fp_rate_ssvs, 
+points((bn_numeric), fp_rate_ssvs, 
        col = colors$ssvs, pch = 1, cex = settings$cex.point, lwd = settings$lwd.axis * 0.8)
 
-lines(log10(sd_numeric), fp_rate_gets, 
+lines((bn_numeric), fp_rate_gets, 
       col = colors$gets, lwd = settings$lwd.line, lty = 2)
-points(log10(sd_numeric), fp_rate_gets, 
+points((bn_numeric), fp_rate_gets, 
        col = colors$gets, pch = 1, cex = settings$cex.point, lwd = settings$lwd.axis * 0.8)
 
-lines(log10(sd_numeric), fp_rate_alasso, 
+lines((bn_numeric), fp_rate_alasso, 
       col = colors$alasso, lwd = settings$lwd.line, lty = 2)
-points(log10(sd_numeric), fp_rate_alasso, 
+points((bn_numeric), fp_rate_alasso, 
        col = colors$alasso, pch = 1, cex = settings$cex.point, lwd = settings$lwd.axis * 0.8)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = (bn_numeric), 
+  labels_x = breaknumber_labels,
   at_y = y_ticks
 )
 
@@ -552,11 +557,11 @@ near_miss_prop_gets <- near_miss_gets / pmax(summary_table["fp.gets", ], 1)
 near_miss_prop_alasso <- near_miss_alasso / pmax(summary_table["fp.alasso", ], 1)
 
 plot(
-  x = log10(sd_numeric), 
+  x = (bn_numeric), 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range((bn_numeric)),
   ylim = c(0, 1),
-  xlab = "Threshold Level (SD, log scale)",
+  xlab = "Number of breaks",
   ylab = "Proportion of False Positives",
   main = "Near Misses (±1 Period)",
   type = "n",
@@ -568,24 +573,24 @@ plot(
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
 # Plot near-miss proportions
-lines(log10(sd_numeric), near_miss_prop_ssvs, 
+lines(bn_numeric, near_miss_prop_ssvs, 
       col = colors$ssvs, lwd = settings$lwd.line)
-points(log10(sd_numeric), near_miss_prop_ssvs, 
+points(bn_numeric, near_miss_prop_ssvs, 
        col = colors$ssvs, pch = 16, cex = settings$cex.point)
 
-lines(log10(sd_numeric), near_miss_prop_gets, 
+lines(bn_numeric, near_miss_prop_gets, 
       col = colors$gets, lwd = settings$lwd.line)
-points(log10(sd_numeric), near_miss_prop_gets, 
+points(bn_numeric, near_miss_prop_gets, 
        col = colors$gets, pch = 16, cex = settings$cex.point)
 
-lines(log10(sd_numeric), near_miss_prop_alasso, 
+lines(bn_numeric, near_miss_prop_alasso, 
       col = colors$alasso, lwd = settings$lwd.line)
-points(log10(sd_numeric), near_miss_prop_alasso, 
+points(bn_numeric, near_miss_prop_alasso, 
        col = colors$alasso, pch = 16, cex = settings$cex.point)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = bn_numeric, 
+  labels_x = breaknumber_labels,
   at_y = seq(0, 1, 0.2)
 )
 
@@ -608,22 +613,22 @@ dev.off()
 # ==============================================================================
 
 # Individual plot for Precision
-precision_file_individual <- sprintf("./Simulations/%s/%s_precision_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+precision_file_individual <- sprintf("./Simulations/%s/%s_precision-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                                      date, 
                                      settings$suffix,
+                                     breaksize_slct,
                                      gets_lvl,
                                      bisam_prior, 
-                                     ifelse(tau == "", "auto", tau), 
-                                     setting)
+                                     ifelse(tau == "", "auto", tau))
 
 pdf(precision_file_individual, width = settings$pdf.width.single, height = settings$pdf.height.single)
 par(mfrow = c(1, 1))
 setup_plot()
 
 plot(
-  x = log10(sd_numeric), 
+  x = bn_numeric, 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range(bn_numeric),
   ylim = c(0, 1),
   xlab = "Threshold Level (SD, log scale)",
   ylab = "Precision",
@@ -636,24 +641,24 @@ plot(
 
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
-lines(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
+lines((metrics$BN_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
       col = colors$ssvs, lwd = settings$lwd.line * 1.2)
-points(log10(metrics$SD_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
+points((metrics$BN_num[ssvs_idx]), metrics$Precision[ssvs_idx], 
        col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
+lines((metrics$BN_num[gets_idx]), metrics$Precision[gets_idx], 
       col = colors$gets, lwd = settings$lwd.line * 1.2)
-points(log10(metrics$SD_num[gets_idx]), metrics$Precision[gets_idx], 
+points((metrics$BN_num[gets_idx]), metrics$Precision[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+lines((metrics$BN_num[alasso_idx]), metrics$Precision[alasso_idx], 
       col = colors$alasso, lwd = settings$lwd.line * 1.2)
-points(log10(metrics$SD_num[alasso_idx]), metrics$Precision[alasso_idx], 
+points((metrics$BN_num[alasso_idx]), metrics$Precision[alasso_idx], 
        col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = bn_numeric, 
+  labels_x = breaknumber_labels,
   at_y = seq(0, 1, 0.2)
 )
 
@@ -675,9 +680,9 @@ par(mfrow = c(1, 1))
 setup_plot()
 
 plot(
-  x = log10(sd_numeric), 
+  x = bn_numeric, 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range(bn_numeric),
   ylim = c(0, 1),
   xlab = "Threshold Level (SD, log scale)",
   ylab = "F1 Score",
@@ -690,24 +695,24 @@ plot(
 
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
-lines(log10(metrics$SD_num[ssvs_idx]), metrics$F1[ssvs_idx], 
+lines((metrics$BN_num[ssvs_idx]), metrics$F1[ssvs_idx], 
       col = colors$ssvs, lwd = settings$lwd.line * 1.2)
-points(log10(metrics$SD_num[ssvs_idx]), metrics$F1[ssvs_idx], 
+points((metrics$BN_num[ssvs_idx]), metrics$F1[ssvs_idx], 
        col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx], 
+lines((metrics$BN_num[gets_idx]), metrics$F1[gets_idx], 
       col = colors$gets, lwd = settings$lwd.line * 1.2)
-points(log10(metrics$SD_num[gets_idx]), metrics$F1[gets_idx], 
+points((metrics$BN_num[gets_idx]), metrics$F1[gets_idx], 
        col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+lines((metrics$BN_num[alasso_idx]), metrics$F1[alasso_idx], 
       col = colors$alasso, lwd = settings$lwd.line * 1.2)
-points(log10(metrics$SD_num[alasso_idx]), metrics$F1[alasso_idx], 
+points((metrics$BN_num[alasso_idx]), metrics$F1[alasso_idx], 
        col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = bn_numeric, 
+  labels_x = breaknumber_labels,
   at_y = seq(0, 1, 0.2)
 )
 
@@ -724,13 +729,13 @@ legend("bottomright",
 dev.off()
 
 # Individual plot for TP and FP Rates
-tpfp_rate_file <- sprintf("./Simulations/%s/%s_tpfp_rates_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+tpfp_rate_file <- sprintf("./Simulations/%s/%s_tpfp_rates-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                           date, 
                           settings$suffix,
+                          breaksize_slct,
                           gets_lvl,
                           bisam_prior, 
-                          ifelse(tau == "", "auto", tau), 
-                          setting)
+                          ifelse(tau == "", "auto", tau))
 
 pdf(tpfp_rate_file, width = settings$pdf.width.single, height = settings$pdf.height.single)
 par(mfrow = c(1, 1))
@@ -750,9 +755,9 @@ all_rates <- c(tp_rate_ssvs, tp_rate_gets, tp_rate_alasso,
 ylim_max <- 1.1
 
 plot(
-  x = log10(sd_numeric), 
+  x = bn_numeric, 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range(bn_numeric),
   ylim = c(0, ylim_max),
   xlab = "Threshold Level (SD, log scale)",
   ylab = "Rate (relative to true breaks)",
@@ -768,40 +773,40 @@ abline(h = y_ticks, col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 abline(h = 1, col = colors$gray, lty = 2, lwd = settings$lwd.axis)
 
 # True Positive Rates (solid)
-lines(log10(sd_numeric), tp_rate_ssvs, 
+lines(bn_numeric, tp_rate_ssvs, 
       col = colors$ssvs, lwd = settings$lwd.line * 1.2, lty = 1)
-points(log10(sd_numeric), tp_rate_ssvs, 
+points(bn_numeric, tp_rate_ssvs, 
        col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(sd_numeric), tp_rate_gets, 
+lines(bn_numeric, tp_rate_gets, 
       col = colors$gets, lwd = settings$lwd.line * 1.2, lty = 1)
-points(log10(sd_numeric), tp_rate_gets, 
+points(bn_numeric, tp_rate_gets, 
        col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(sd_numeric), tp_rate_alasso, 
+lines(bn_numeric, tp_rate_alasso, 
       col = colors$alasso, lwd = settings$lwd.line * 1.2, lty = 1)
-points(log10(sd_numeric), tp_rate_alasso, 
+points(bn_numeric, tp_rate_alasso, 
        col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
 
 # False Positive Rates (dashed)
-lines(log10(sd_numeric), fp_rate_ssvs, 
+lines(bn_numeric, fp_rate_ssvs, 
       col = colors$ssvs, lwd = settings$lwd.line * 1.2, lty = 2)
-points(log10(sd_numeric), fp_rate_ssvs, 
+points(bn_numeric, fp_rate_ssvs, 
        col = colors$ssvs, pch = 1, cex = settings$cex.point * 1.15, lwd = settings$lwd.axis)
 
-lines(log10(sd_numeric), fp_rate_gets, 
+lines(bn_numeric, fp_rate_gets, 
       col = colors$gets, lwd = settings$lwd.line * 1.2, lty = 2)
-points(log10(sd_numeric), fp_rate_gets, 
+points(bn_numeric, fp_rate_gets, 
        col = colors$gets, pch = 1, cex = settings$cex.point * 1.15, lwd = settings$lwd.axis)
 
-lines(log10(sd_numeric), fp_rate_alasso, 
+lines(bn_numeric, fp_rate_alasso, 
       col = colors$alasso, lwd = settings$lwd.line * 1.2, lty = 2)
-points(log10(sd_numeric), fp_rate_alasso, 
+points(bn_numeric, fp_rate_alasso, 
        col = colors$alasso, pch = 1, cex = settings$cex.point * 1.15, lwd = settings$lwd.axis)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = bn_numeric, 
+  labels_x = breaknumber_labels,
   at_y = y_ticks
 )
 
@@ -821,13 +826,13 @@ legend("topright",
 dev.off()
 
 # Individual plot for Near Misses
-near_miss_file_individual <- sprintf("./Simulations/%s/%s_nearmiss_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+near_miss_file_individual <- sprintf("./Simulations/%s/%s_nearmiss-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                                      date, 
                                      settings$suffix,
+                                     breaksize_slct,
                                      gets_lvl,
                                      bisam_prior, 
-                                     ifelse(tau == "", "auto", tau), 
-                                     setting)
+                                     ifelse(tau == "", "auto", tau))
 
 pdf(near_miss_file_individual, width = settings$pdf.width.single, height = settings$pdf.height.single)
 par(mfrow = c(1, 1))
@@ -843,9 +848,9 @@ near_miss_prop_gets <- near_miss_gets / pmax(summary_table["fp.gets", ], 1)
 near_miss_prop_alasso <- near_miss_alasso / pmax(summary_table["fp.alasso", ], 1)
 
 plot(
-  x = log10(sd_numeric), 
+  x = bn_numeric, 
   y = NULL,
-  xlim = range(log10(sd_numeric)),
+  xlim = range(bn_numeric),
   ylim = c(0, 1),
   xlab = "Threshold Level (SD, log scale)",
   ylab = "Proportion of False Positives",
@@ -858,24 +863,24 @@ plot(
 
 abline(h = seq(0, 1, 0.2), col = colors$lightgray, lty = 1, lwd = settings$lwd.grid)
 
-lines(log10(sd_numeric), near_miss_prop_ssvs, 
+lines(bn_numeric, near_miss_prop_ssvs, 
       col = colors$ssvs, lwd = settings$lwd.line * 1.2)
-points(log10(sd_numeric), near_miss_prop_ssvs, 
+points(bn_numeric, near_miss_prop_ssvs, 
        col = colors$ssvs, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(sd_numeric), near_miss_prop_gets, 
+lines(bn_numeric, near_miss_prop_gets, 
       col = colors$gets, lwd = settings$lwd.line * 1.2)
-points(log10(sd_numeric), near_miss_prop_gets, 
+points(bn_numeric, near_miss_prop_gets, 
        col = colors$gets, pch = 16, cex = settings$cex.point * 1.15)
 
-lines(log10(sd_numeric), near_miss_prop_alasso, 
+lines(bn_numeric, near_miss_prop_alasso, 
       col = colors$alasso, lwd = settings$lwd.line * 1.2)
-points(log10(sd_numeric), near_miss_prop_alasso, 
+points(bn_numeric, near_miss_prop_alasso, 
        col = colors$alasso, pch = 16, cex = settings$cex.point * 1.15)
 
 add_clean_axes(
-  at_x = log10(sd_numeric), 
-  labels_x = breaksize_labels,
+  at_x = bn_numeric, 
+  labels_x = breaknumber_labels,
   at_y = seq(0, 1, 0.2)
 )
 
