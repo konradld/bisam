@@ -33,19 +33,11 @@ tau <- "1.92072941034706"
 setting <- "dense"
 
 # Set up paths
-if(tau == "") {
-  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s/", 
-                       date, 
-                       gets_lvl,
-                       bisam_prior)
-} else {
-  data_path <- sprintf("./Simulations/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
-                       date, 
-                       gets_lvl,
-                       bisam_prior,
-                       tau)
-}
-
+data_path <- sprintf("./output/simulation/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
+                     date, 
+                     gets_lvl,
+                     bisam_prior,
+                     tau)
 
 # Get list of all RDS files in the folder
 file_list <- list.files(
@@ -290,38 +282,14 @@ add_clean_axes <- function(side = 1:2, at_x = NULL, labels_x = NULL,
 # ==============================================================================
 
 # Output file names
-if(tau == "") {
-  multi_panel_file <- sprintf("./Simulations/%s/%s_multi_gets-%s_bisam-%s_tau-%s_%s_%s.pdf", 
-                              date, 
-                              settings$suffix,
-                              gets_lvl,
-                              bisam_prior, 
-                              "auto", 
-                              setting)
-  f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s_%s_%s.pdf", 
-                           date, 
-                           settings$suffix,
-                           gets_lvl,
-                           bisam_prior, 
-                           "auto", 
-                           setting)
-  
-} else {
-  multi_panel_file <- sprintf("./Simulations/%s/%s_multi_gets-%s_bisam-%s_tau-%s_%s.pdf", 
-                              date, 
-                              settings$suffix,
-                              gets_lvl,
-                              bisam_prior, 
-                              tau, 
-                              setting)
-  f1_score_file <- sprintf("./Simulations/%s/%s_f1_gets-%s_bisam-%s_tau-%s_%s.pdf", 
-                           date, 
-                           settings$suffix,
-                           gets_lvl,
-                           bisam_prior, 
-                           tau, 
-                           setting)
-}
+
+multi_panel_file <- sprintf("./output/simulation/%s/%s_multi_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+                            date, 
+                            settings$suffix,
+                            gets_lvl,
+                            bisam_prior, 
+                            tau, 
+                            setting)
 
 # Open PDF for multi-panel plot
 pdf(multi_panel_file, width = settings$pdf.width, height = settings$pdf.height)
@@ -608,7 +576,7 @@ dev.off()
 # ==============================================================================
 
 # Individual plot for Precision
-precision_file_individual <- sprintf("./Simulations/%s/%s_precision_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+precision_file_individual <- sprintf("./output/simulation/%s/%s_precision_gets-%s_bisam-%s_tau-%s_%s.pdf", 
                                      date, 
                                      settings$suffix,
                                      gets_lvl,
@@ -670,6 +638,14 @@ legend("bottomright",
 dev.off()
 
 # Individual plot for F1 Score
+f1_score_file <- sprintf("./output/simulation/%s/%s_f1_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+                         date, 
+                         settings$suffix,
+                         gets_lvl,
+                         bisam_prior, 
+                         tau, 
+                         setting)
+
 pdf(f1_score_file, width = settings$pdf.width.single, height = settings$pdf.height.single)
 par(mfrow = c(1, 1))
 setup_plot()
@@ -724,7 +700,7 @@ legend("bottomright",
 dev.off()
 
 # Individual plot for TP and FP Rates
-tpfp_rate_file <- sprintf("./Simulations/%s/%s_tpfp_rates_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+tpfp_rate_file <- sprintf("./output/simulation/%s/%s_tpfp_rates_gets-%s_bisam-%s_tau-%s_%s.pdf", 
                           date, 
                           settings$suffix,
                           gets_lvl,
@@ -821,7 +797,7 @@ legend("topright",
 dev.off()
 
 # Individual plot for Near Misses
-near_miss_file_individual <- sprintf("./Simulations/%s/%s_nearmiss_gets-%s_bisam-%s_tau-%s_%s.pdf", 
+near_miss_file_individual <- sprintf("./output/simulation/%s/%s_nearmiss_gets-%s_bisam-%s_tau-%s_%s.pdf", 
                                      date, 
                                      settings$suffix,
                                      gets_lvl,

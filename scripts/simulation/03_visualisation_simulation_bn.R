@@ -26,28 +26,20 @@ PLOT_MODE <- "slide"  # Change to "publication" for journal-style plots
 library(dplyr)
 
 date <- "2026-01-23_BN"
-gets_lvl <- "0.01"
+gets_lvl <- "0.01" # or "0.05"
 bisam_prior <- "imom"
 tau <- "3.31744830051061" # or "1.92072941034706"
 
 # break SD to consider
-breaksize_slct <- 3
+breaksize_slct <- 3 # or 2, 5
 
 
 # Set up paths
-if(tau == "") {
-  data_path <- sprintf("./output/simulation/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s/", 
-                       date, 
-                       gets_lvl,
-                       bisam_prior)
-} else {
-  data_path <- sprintf("./output/simulation/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
-                       date, 
-                       gets_lvl,
-                       bisam_prior,
-                       tau)
-}
-
+data_path <- sprintf("./output/simulation/%s/gets_bisam_comparison_gets-%s_bisam_prior-%s_tau-%s/", 
+                     date, 
+                     gets_lvl,
+                     bisam_prior,
+                     tau)
 
 # Get list of all RDS files in the folder
 file_list <- list.files(
@@ -294,38 +286,14 @@ add_clean_axes <- function(side = 1:2, at_x = NULL, labels_x = NULL,
 # ==============================================================================
 
 # Output file names
-if(tau == "") {
-  multi_panel_file <- sprintf("./Simulations/%s/%s_multi-breaks-SD%s_gets-%s_bisam-%s_tau-%s_%s.pdf", 
-                              date, 
-                              settings$suffix,
-                              breaksize_slct,
-                              gets_lvl,
-                              bisam_prior, 
-                              "auto")
-  f1_score_file <- sprintf("./Simulations/%s/%s_f1-breaks-SD%s_gets-%s_bisam-%s_tau-%s_%s.pdf", 
-                           date, 
-                           settings$suffix,
-                           breaksize_slct,
-                           gets_lvl,
-                           bisam_prior, 
-                           "auto")
-  
-} else {
-  multi_panel_file <- sprintf("./Simulations/%s/%s_multi-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
-                              date, 
-                              settings$suffix,
-                              breaksize_slct,
-                              gets_lvl,
-                              bisam_prior, 
-                              tau)
-  f1_score_file <- sprintf("./Simulations/%s/%s_f1-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
-                           date, 
-                           settings$suffix,
-                           breaksize_slct,
-                           gets_lvl,
-                           bisam_prior, 
-                           tau)
-}
+multi_panel_file <- sprintf("./output/simulation/%s/%s_multi-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
+                            date, 
+                            settings$suffix,
+                            breaksize_slct,
+                            gets_lvl,
+                            bisam_prior, 
+                            tau)
+
 
 # Open PDF for multi-panel plot
 pdf(multi_panel_file, width = settings$pdf.width, height = settings$pdf.height)
@@ -612,7 +580,7 @@ dev.off()
 # ==============================================================================
 
 # Individual plot for Precision
-precision_file_individual <- sprintf("./Simulations/%s/%s_precision-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
+precision_file_individual <- sprintf("./output/simulation/%s/%s_precision-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                                      date, 
                                      settings$suffix,
                                      breaksize_slct,
@@ -673,7 +641,16 @@ legend("bottomright",
 
 dev.off()
 
+
 # Individual plot for F1 Score
+f1_score_file <- sprintf("./output/simulation/%s/%s_f1-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
+                         date, 
+                         settings$suffix,
+                         breaksize_slct,
+                         gets_lvl,
+                         bisam_prior, 
+                         tau)
+
 pdf(f1_score_file, width = settings$pdf.width.single, height = settings$pdf.height.single)
 par(mfrow = c(1, 1))
 setup_plot()
@@ -728,7 +705,7 @@ legend("bottomright",
 dev.off()
 
 # Individual plot for TP and FP Rates
-tpfp_rate_file <- sprintf("./Simulations/%s/%s_tpfp_rates-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
+tpfp_rate_file <- sprintf("./output/simulation/%s/%s_tpfp_rates-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                           date, 
                           settings$suffix,
                           breaksize_slct,
@@ -825,7 +802,7 @@ legend("topright",
 dev.off()
 
 # Individual plot for Near Misses
-near_miss_file_individual <- sprintf("./Simulations/%s/%s_nearmiss-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
+near_miss_file_individual <- sprintf("./output/simulation/%s/%s_nearmiss-breaks-SD%s_gets-%s_bisam-%s_tau-%s.pdf", 
                                      date, 
                                      settings$suffix,
                                      breaksize_slct,
