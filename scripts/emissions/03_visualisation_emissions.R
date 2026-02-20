@@ -5,23 +5,25 @@ library(dplyr)
 # ==============================================================================
 # SETUP AND DATA LOADING
 # ==============================================================================
-date <- "2025-11-26_clusteredSEs"
+date <- "2026-02-20"
 check_outl <- "TRUE"
-tau <- "1.92072941034706"
+out_scale <- 1000
+tau <- "1.92072941034706" #  or 3.31744830051061
 prior <- "imom"
 c0 <- C0 <- "auto"
 modprior <- "bern"
-v0 <- "0.50"
+v0 <- "0.5"
 
-bisam_path <- sprintf("/data/bbd/05_emissions/results/%s/ssvs_checkOutlier-%s_tau-%s_prior-%s_c0-%s_C0-%s_modprior-%s_v0-%s.RDS", 
-                      date, check_outl, tau, prior, c0, C0, modprior, v0) 
+bisam_path <- sprintf("./output/emissions/%s/ssvs_checkOutlier-%s_outscale-%s_tau-%s_prior-%s_c0-%s_C0-%s_modprior-%s_v0-%s.RDS", 
+                      date, check_outl, out_scale, tau, prior, c0, C0, modprior, v0) 
 
 bisam_results <- readRDS(bisam_path)
 
-gets_results_05 <- readRDS(sprintf("/data/bbd/05_emissions/results/%s/gets_0.05.RDS", 
+gets_results_05 <- readRDS(sprintf("./output/emissions/%s/gets_0.05.RDS", 
                                    date))
-gets_results_01 <- readRDS(sprintf("/data/bbd/05_emissions/results/%s/gets_0.01.RDS", 
+gets_results_01 <- readRDS(sprintf("./output/emissions/%s/gets_0.01.RDS", 
                                    date))
+
 # ==============================================================================
 # FUNCTION DEFINITIONS
 # ==============================================================================
@@ -92,7 +94,7 @@ add_break_shading_gradient <- function(breaks_to_shade,
 # ==============================================================================
 
 library(stringr)
-source("./00_code/bisam/Functions/pip_window_fun.R")
+source("./functions/pip_window_fun.R")
 
 # Load sector-specific results
 bisam_res_sector <- bisam_results
@@ -123,20 +125,20 @@ win3_pips <- pip_window(mod, win_size = 3, op = ">=", pip_threshold = 1 - PIP_TH
 
 # Color palette
 COLORS <- list(
-  main = "#2166AC",
+  main = "#0072B2",
   step = "black",
   outl_marker = "#D5B60A",
   fit = "#1B9E77",
   grid = "gray70",
-  positive_break = "lightgreen",
-  negative_break = "indianred",
+  positive_break = "#009E73",
+  negative_break = "#D55E00",
   gets01 = "black",
   gets05 = "goldenrod"
 )
 
 
 # pdf(sprintf("./05_emissions/output/emissions_single_checkOutlier-%s_tau-%s_prior-%s-%s.pdf",
-#             check_outl, tau, sis_prior, date_run),
+#             check_outl, tau, prior, date),
 #     width = 16, height = 9, onefile = TRUE)
 # 
 # # Extract sample dimensions
@@ -260,7 +262,7 @@ COLORS <- list(
 #     sum(country_boundaries_a < x)
 #   })
 #   points(x = gets_indices05_plot, y = omega_plot[gets_indices05_plot],
-#          pch = 4, col = COLORS$gets05, lwd = 2, cex = 1.2)
+#          pch = 4, col = COLORS$gets05, lwd = 2.5, cex = 1.2)
 # }
 # 
 # if (length(gets_indices01) > 0) {
@@ -268,7 +270,7 @@ COLORS <- list(
 #     sum(country_boundaries_a < x)
 #   })
 #   points(x = gets_indices01_plot, y = omega_plot[gets_indices01_plot],
-#          pch = 4, col = COLORS$gets01, lwd = 2, cex = 1.2)
+#          pch = 4, col = COLORS$gets01, lwd = 2.5, cex = 1.2)
 # }
 # 
 # # Add country labels
@@ -462,8 +464,8 @@ COLORS <- list(
 # dev.off()
 
 
-pdf(sprintf("./05_emissions/output/emissions_multi_checkOutlier-%s_tau-%s_prior-%s-%s.pdf",
-            check_outl, tau, sis_prior, date_run),
+pdf(sprintf("./output/emissions/%s/multi_checkOutlier-%s_outscale-%s_tau-%s_prior-%s.pdf",
+            date, check_outl, out_scale, tau, prior),
     width = 16, height = 9, onefile = TRUE)
 
 # Break up in three blocks
@@ -619,7 +621,7 @@ for(cc in seq_len(length(c_list))) {
       sum(country_boundaries_a < x)
     })
     points(x = gets_indices_plot, y = omega_plot[gets_indices_plot],
-           pch = 4, col = COLORS$gets01, lwd = 2, cex = 1.2)
+           pch = 4, col = COLORS$gets01, lwd = 2.5, cex = 1.5)
   }
   
   # gets_indices05 <- (1:(n_mod * (t_mod - 3)))[
@@ -631,7 +633,7 @@ for(cc in seq_len(length(c_list))) {
   #     sum(country_boundaries_a < x)
   #   })
   #   points(x = gets_indices05_plot, y = omega_plot[gets_indices05_plot],
-  #          pch = 4, col = COLORS$gets01, lwd = 2, cex = 1.2)
+  #          pch = 4, col = COLORS$gets01, lwd = 2.5, cex = 1.2)
   # }
 
   # Add country labels
