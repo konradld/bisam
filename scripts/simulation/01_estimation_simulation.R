@@ -513,7 +513,7 @@ if (is_slurm) {
 
 if (!dir.exists(folder_path)) {dir.create(folder_path)}
 
-file_name <- sprintf("breaksize-%0.1fSD_breaknumber-%0.0f_rep%0.0f.RDS", conf$rel_effect, conf$setup, conf$number_reps)
+file_name <- sprintf("breaksize-%0.1fSD_breaknumber-%s_rep%0.0f.RDS", conf$rel_effect, conf$setup, conf$number_reps)
 
 saveRDS(break_comparison, file = paste0(folder_path, file_name))
 
