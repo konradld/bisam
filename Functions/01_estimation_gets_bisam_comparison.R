@@ -30,7 +30,7 @@ config <- expand.grid(
   rel_effect = c(2, 3, 5),
   tau = c(priorp2g(0.05, 1), priorp2g(0.01, 1)), # vary threshold?
   number_reps = 1:100,
-  setup = c(1:20),
+  setup = c(1:20), # c("sparse", "dense", 'sequence for number of breaks in data') 
   date = "2026-01-23",
   stringsAsFactors = FALSE
 )
