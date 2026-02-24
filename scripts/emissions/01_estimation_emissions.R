@@ -30,14 +30,15 @@ library(mombf)
 config <- list(
   ssvs_settings = expand.grid(
     sis_prior = c("imom"),
-    tau = sapply(seq(0.5, 10, by = 0.5), priorp2g, priorp = 0.05, prior = c("iMom")), 
+    tau = sapply(c(0.05, 0.01), priorp2g, q = 1, prior = c("iMom")), 
     check_outl = c(TRUE, FALSE),
+    out_scale = c(10, 10^2, 10^3, 10^4),
     beta_prior = c("f"),
     incl_prior = c("bern"),
     stringsAsFactors = FALSE
   ),
   gets_lvl = c(0.05, 0.01), # just use the setting as done by Koch et al (2022)
-  date = "2025-11-26"
+  date = "2026-02-24"
 )
 
 if(is_slurm) {
@@ -109,7 +110,7 @@ if(run_numeric <= nrow(config$ssvs_settings)) {
   
   OUTLIER_INCL_ALPHA <- 1
   OUTLIER_INCL_BETA <- 10
-  OUTLIER_SCALE <- 10
+  OUTLIER_SCALE <- conf$out_scale
   
   # Advanced options
   DO_SPLIT_Z <- TRUE
@@ -162,8 +163,9 @@ if(run_numeric <= nrow(config$ssvs_settings)) {
     do_geweke_test = DO_GEWEKE_TEST
   )
   
-  dir_save <- sprintf(paste0(dir_res, "ssvs_checkOutlier-%s_tau-%s_prior-%s_c0-%s_C0-%s_modprior-%s_v0-%s.RDS"), 
+  dir_save <- sprintf(paste0(dir_res, "ssvs_checkOutlier-%s_outscale-%s_tau-%s_prior-%s_c0-%s_C0-%s_modprior-%s_v0-%s.RDS"), 
                       conf$check_outl,
+                      conf$out_scale,
                       conf$tau,
                       conf$sis_prior,
                       if(is.null(SIGMA2_SHAPE)){"auto"}else{as.character(SIGMA2_SHAPE)},
