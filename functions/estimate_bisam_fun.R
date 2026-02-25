@@ -313,6 +313,28 @@ estimate_bisam <- function(
   }
   obs_with_steps <- unique(ceiling(steps_to_check / (t - 3)))
   
+  # bespoke univariate iMom function
+  log_dimom <- function(x, gamma0, k, nu, tau, sigma2) {
+    stopifnot(k > 0, nu > 0, tau > 0, sigma2 > 0)
+    
+    z      <- x - gamma0
+    result <- rep(-Inf, length(z))
+    valid  <- z != 0
+    
+    if (any(valid)) {
+      lz        <- log(abs(z[valid]))
+      log_scale <- 0.5 * log(tau * sigma2)
+      
+      const <- log(k) +
+        (nu / 2) * log(tau * sigma2) -
+        lgamma(nu / (2 * k))
+      
+      result[valid] <- const -
+        (nu + 1) * lz -
+        exp(-2 * k * (lz - log_scale))
+    }
+    result
+  }
   # ============================================================================
   # GIBBS SAMPLER
   # ============================================================================
@@ -334,7 +356,8 @@ estimate_bisam <- function(
       
       # Compute log probabilities for outlier models
       log_p0 <- dnorm(residuals, 0, sqrt_s2_i, log = TRUE) + log(1 - k_i)
-      log_p1 <- dnorm(residuals, 0, sqrt_outlier_scale * sqrt_s2_i, log = TRUE) + log(k_i)
+      log_p1 <- log_dimom(residuals, gamma0=0, k=1, nu=3, tau=outlier_scale, sigma2=s2_i) + log(k_i)
+      # log_p1 <- dnorm(residuals, 0, sqrt_outlier_scale * sqrt_s2_i, log = TRUE) + log(k_i)
       # log_p1 <- mombf::dimom(residuals, tau = outlier_scale, phi = s2_i, logscale = TRUE) + log(k_i)
       
       # Direct calculation of log probability
@@ -342,7 +365,7 @@ estimate_bisam <- function(
       o_i <- rbinom(N, 1, exp(log_prob_outlier)) # works
       
       # Standardize outliers
-      outlier_rescaling <- ifelse(o_i == 0, 1, sqrt_outlier_scale)
+      outlier_rescaling <- ifelse(o_i == 0, 1, sqrt(2) * sqrt_outlier_scale)
       if (any(o_i > 0)) {
         y_aug <- y / outlier_rescaling
       } else {
