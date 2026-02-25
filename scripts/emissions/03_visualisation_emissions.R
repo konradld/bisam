@@ -5,9 +5,9 @@ library(dplyr)
 # ==============================================================================
 # SETUP AND DATA LOADING
 # ==============================================================================
-date <- "2026-02-20"
+date <- "2026-02-25"
 check_outl <- "TRUE"
-out_scale <- 1000
+out_scale <- 50
 tau <- "1.92072941034706" #  or 3.31744830051061
 prior <- "imom"
 c0 <- C0 <- "auto"
@@ -115,7 +115,6 @@ rownames(gets_coefs) <- gsub("UnitedKingdom", "United Kingdom", rownames(gets_co
 
 
 # Parameters
-
 PIP_THRESHOLD <- 0.5
 
 # Calculate breaks
@@ -466,7 +465,7 @@ COLORS <- list(
 
 pdf(sprintf("./output/emissions/%s/multi_checkOutlier-%s_outscale-%s_tau-%s_prior-%s.pdf",
             date, check_outl, out_scale, tau, prior),
-    width = 16, height = 9, onefile = TRUE)
+    width = 18, height = 8, onefile = TRUE)
 
 # Break up in three blocks
 
@@ -548,47 +547,61 @@ for(cc in seq_len(length(c_list))) {
   # }
 
   cN_idx <- data.frame(unit = cN, unit_idx = seq_len(length(cN)))
-
-  win1_pips_temp <- win1_pips |> filter(unit %in% cN) |>
-    select(-unit_idx) |> left_join(cN_idx, by ="unit") |>
-    relocate(unit_idx, .after = purity) |>
-    mutate(position_idx = (unit_idx - 1) * (t_mod - 3) + time_idx)
-
-  win2_pips_temp <- win2_pips |> filter(unit %in% cN) |>
-    select(-unit_idx) |> left_join(cN_idx, by ="unit") |>
-    relocate(unit_idx, .after = purity) |>
-    mutate(position_idx = (unit_idx - 1) * (t_mod - 3) + time_idx)
   
-  win3_pips_temp <- win3_pips |> filter(unit %in% cN) |>
-    select(-unit_idx) |> left_join(cN_idx, by ="unit") |>
-    relocate(unit_idx, .after = purity) |>
-    mutate(position_idx = (unit_idx - 1) * (t_mod - 3) + time_idx)
-
-  # Add break shading -  need to rework
-  add_break_shading_gradient(
-    breaks_to_shade = win1_pips_temp,
-    colorin_variable = "break_length",
-    color_variable = win1_pips_temp$MAP,
-    ylim = c(0, 1),
-    col = c(COLORS$positive_break, COLORS$negative_break)
-  )
-
-  add_break_shading_gradient(
-    breaks_to_shade = win2_pips_temp,
-    colorin_variable = "break_length",
-    color_variable = win2_pips_temp$MAP,
-    ylim = c(0, 1),
-    col = c(COLORS$positive_break, COLORS$negative_break)
-  )
+  # add break shading
   
-  add_break_shading_gradient(
-    breaks_to_shade = win3_pips_temp,
-    colorin_variable = "break_length",
-    color_variable = win3_pips_temp$MAP,
-    ylim = c(0, 1),
-    col = c(COLORS$positive_break, COLORS$negative_break)
-  )
+  if(!is.null(nrow(win1_pips))) {
+    win1_pips_temp <- win1_pips |> filter(unit %in% cN) |>
+      select(-unit_idx) |> left_join(cN_idx, by ="unit") |>
+      relocate(unit_idx, .after = purity) |>
+      mutate(position_idx = (unit_idx - 1) * (t_mod - 3) + time_idx)
+    
+    if(nrow(win1_pips_temp) > 0) {
+      add_break_shading_gradient(
+        breaks_to_shade = win1_pips_temp,
+        colorin_variable = "break_length",
+        color_variable = win1_pips_temp$MAP,
+        ylim = c(0, 1),
+        col = c(COLORS$positive_break, COLORS$negative_break)
+      )
+    }
+  }
 
+  if(!is.null(nrow(win2_pips))) {
+    win2_pips_temp <- win2_pips |> filter(unit %in% cN) |>
+      select(-unit_idx) |> left_join(cN_idx, by ="unit") |>
+      relocate(unit_idx, .after = purity) |>
+      mutate(position_idx = (unit_idx - 1) * (t_mod - 3) + time_idx)
+    
+    if(nrow(win2_pips_temp) > 0) {
+      add_break_shading_gradient(
+        breaks_to_shade = win2_pips_temp,
+        colorin_variable = "break_length",
+        color_variable = win2_pips_temp$MAP,
+        ylim = c(0, 1),
+        col = c(COLORS$positive_break, COLORS$negative_break)
+      )
+    }
+  }
+  
+
+  if(!is.null(nrow(win3_pips))) {
+    win3_pips_temp <- win3_pips |> filter(unit %in% cN) |>
+      select(-unit_idx) |> left_join(cN_idx, by ="unit") |>
+      relocate(unit_idx, .after = purity) |>
+      mutate(position_idx = (unit_idx - 1) * (t_mod - 3) + time_idx)
+    
+    if(nrow(win3_pips_temp) > 0) {
+      add_break_shading_gradient(
+        breaks_to_shade = win3_pips_temp,
+        colorin_variable = "break_length",
+        color_variable = win3_pips_temp$MAP,
+        ylim = c(0, 1),
+        col = c(COLORS$positive_break, COLORS$negative_break)
+      )
+    }
+  }
+  
   # Redraw main line
   lines(x_coords_a, omega_plot, col = COLORS$main, lwd = 2)
 
@@ -601,15 +614,18 @@ for(cc in seq_len(length(c_list))) {
 
   # Mark detected breaks
   break_indices_orig <- (1:(n_mod * (t_mod - 3)))[omega_with_breaks >= PIP_THRESHOLD]
-  break_indices_plot <- break_indices_orig + sapply(break_indices_orig, function(x) {
-    sum(country_boundaries_a < x)
-  })
-  segments(
-    x0 = break_indices_plot, y0 = 0,
-    x1 = break_indices_plot, y1 = 1,
-    col = COLORS$step, lty = 2, lwd = 1.5
-  )
-
+  
+  if(length(break_indices_orig) > 0) {
+    break_indices_plot <- break_indices_orig + sapply(break_indices_orig, function(x) {
+      sum(country_boundaries_a < x)
+    })
+    segments(
+      x0 = break_indices_plot, y0 = 0,
+      x1 = break_indices_plot, y1 = 1,
+      col = COLORS$step, lty = 2, lwd = 1.5
+    )
+  }
+  
   # Add GETS detections
   gets_indices <- (1:(n_mod * (t_mod - 3)))[
     str_extract(names(omega_with_breaks), "(?<=sis\\.).+") %in%
