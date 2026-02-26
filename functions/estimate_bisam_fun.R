@@ -395,11 +395,10 @@ estimate_bisam <- function(
     # ==========================================================================
     # DRAW p(beta | sigma^2, gamma, y)
     # ==========================================================================
-    
     if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso" || beta_prior == "f_indep") {
       
       if (do_check_outlier || do_cluster_s2) {
-        XtW <- X * prec_i
+        XtW <- X / (s2_i * lambda_i)
         XtWX <- crossprod(XtW, X)
         XtWy <- crossprod(XtW, y_tmp)
         
