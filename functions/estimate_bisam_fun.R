@@ -252,6 +252,9 @@ estimate_bisam <- function(
   o_i <- numeric(N)
   pip_i <- numeric(r)
   
+  # --- Outlier variance inflation factor ---
+  lambda_i <- rep(1, N)
+  
   # --- Starting Values for Horseshoe Plug-In ---
   hs_lamb_b <- rep(1, p)
   hs_tau_b <- 1
@@ -364,30 +367,26 @@ estimate_bisam <- function(
       log_prob_outlier <- log_p1 - matrixStats::rowLogSumExps(cbind(log_p0, log_p1))
       o_i <- rbinom(N, 1, exp(log_prob_outlier)) # works
       
-      # Standardize outliers
-      outlier_rescaling <- ifelse(o_i == 0, 1, sqrt(2) * sqrt_outlier_scale)
-      if (any(o_i > 0)) {
-        y_aug <- y / outlier_rescaling
-      } else {
-        y_aug <- y
-      }
+      # UPDATE VARIANCE INFLATION FACTORS
+      lambda_i <- ifelse(o_i == 0, 1, 2 * outlier_scale) # 2*tau*s2 is the variance of iMom(0,1,3,tau,s2)
+      
     }
     
     # ==========================================================================
     # DRAW p(sigma^2 | beta, gamma, y)
     # ==========================================================================
-    y_tmp <- y_aug - Zg_i
+    y_tmp <- y - Zg_i
     residuals <- y_tmp - Xb_i
     
     if (do_cluster_s2) {
-      residuals_matrix <- matrix(residuals, nrow = t, ncol = n)
-      cN <- sigma2_shape+t/2
-      CN <- sigma2_rate + 0.5 * colSums(residuals_matrix^2)
-      s2_i_unique <- 1 / rgamma(n, shape = cN, rate = CN) # works
+      weighted_res2 <- matrix(residuals^2 / lambda_i, nrow = t, ncol = n)
+      cN <- sigma2_shape + t / 2
+      CN <- sigma2_rate + 0.5 * colSums(weighted_res2)
+      s2_i_unique <- 1 / rgamma(n, shape = cN, rate = CN)
       s2_i <- rep(s2_i_unique, each = t)
     } else {
-      cN <- sigma2_shape + n * t / 2
-      CN <- sigma2_rate + 0.5 * sum(residuals^2)
+      cN <- sigma2_shape + N / 2
+      CN <- sigma2_rate + 0.5 * sum(residuals^2 / lambda_i)
       s2_i_unique <- 1 / rgamma(1, shape = cN, rate = CN)
       s2_i[] <- s2_i_unique
     }
@@ -396,23 +395,26 @@ estimate_bisam <- function(
     # ==========================================================================
     # DRAW p(beta | sigma^2, gamma, y)
     # ==========================================================================
+    
     if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso" || beta_prior == "f_indep") {
-      if (do_cluster_s2) {
-        XtS <- X / s2_i
-        XtSX <- crossprod(XtS, X)
-        XtSy <- crossprod(XtS, y_tmp)
+      
+      if (do_check_outlier || do_cluster_s2) {
+        XtW <- X * prec_i
+        XtWX <- crossprod(XtW, X)
+        XtWy <- crossprod(XtW, y_tmp)
         
         if (beta_prior == "f_indep") {
-          BN <- safe_invert(beta_var_inv + XtSX, do_sparse_computation)
+          BN <- safe_invert(beta_var_inv + XtWX, do_sparse_computation)
         } else {
-          beta_var_inv <- XtSX / beta_variance_scale
-          BN <- safe_invert(crossprod(X * (1 / s2_i + 1 / (beta_variance_scale * s2_i)), X), do_sparse_computation)
+          beta_var_inv <- XX / (beta_variance_scale * s2_i_unique)
+          BN <- safe_invert(beta_var_inv + XtWX, do_sparse_computation)
         }
-        bN <- BN %*% (XtSy + beta_var_inv %*% beta_mean)
-      } else {
+        bN <- BN %*% (XtWy + beta_var_inv %*% beta_mean)
+      }
+      else {
         if (beta_prior == "f_indep") {
           XtSX <- XX / s2_i_unique
-          XtSy <- crossprod(X, y_temp) / s2_i_unique
+          XtSy <- crossprod(X, y_tmp) / s2_i_unique
           
           BN <- safe_invert(beta_var_inv + XtSX, do_sparse_computation)
           bN <- BN %*% (XtSy + beta_var_inv %*% beta_mean)
@@ -427,18 +429,18 @@ estimate_bisam <- function(
     }
     
     b_i <- try((bN + t(chol(BN)) %*% rnorm(p)), silent = TRUE)
-    if (is(b_i, "try-error")) { b_i <- t(rmvnorm(1,as.vector(bN),as.matrix(BN))) }
+    if (is(b_i, "try-error")) { b_i <- t(rmvnorm(1, as.vector(bN), as.matrix(BN))) }
     
     Xb_i <- X %*% b_i
     
     # ==========================================================================
     # DRAW p(omega | beta, sigma^2, y) - Selection Indicators
     # ==========================================================================
-    y_tmp <- y_aug - Xb_i
+    y_tmp <- y - Xb_i
     
-    # Standardize for model selection
-    y_tmp_sd <- y_tmp / sqrt_s2_i
-    s2_i_tmp <- if(do_cluster_s2) s2_i_unique else rep(s2_i_unique,n)
+    # Standardize for model selection:
+    y_tmp_sd <- y_tmp / sqrt(s2_i * lambda_i)
+    s2_i_tmp <- if(do_cluster_s2) s2_i_unique else rep(s2_i_unique, n)
     
     for (j in obs_with_steps) {
       
@@ -466,10 +468,18 @@ estimate_bisam <- function(
         var_prior_f <- igprior(sigma2_shape, sigma2_rate)
       }
       
+      if (do_check_outlier) {
+        lambda_j <- lambda_i[n_idx]
+        sqrt_total_var_j <- sqrt(s2_i[n_idx] * lambda_j)
+        Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE] / sqrt_total_var_j
+      } else {
+        Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE]
+      }
+      
       # Model selection using mombf
       w_i_mod <- mombf::modelSelection(
         y = y_tmp_sd[n_idx],
-        x = Z[n_idx, p_idx_rand, drop = FALSE],
+        x = Z_std_j,
         groups = 1:length(p_idx),
         nknots = 9,
         center = FALSE,
