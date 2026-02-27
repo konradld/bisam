@@ -405,7 +405,7 @@ estimate_bisam <- function(
         if (beta_prior == "f_indep") {
           BN <- safe_invert(beta_var_inv + XtWX, do_sparse_computation)
         } else {
-          beta_var_inv <- XX / (beta_variance_scale * s2_i_unique)
+          beta_var_inv <- crossprod(X / (beta_variance_scale * s2_i_unique), X)
           BN <- safe_invert(beta_var_inv + XtWX, do_sparse_computation)
         }
         bN <- BN %*% (XtWy + beta_var_inv %*% beta_mean)
