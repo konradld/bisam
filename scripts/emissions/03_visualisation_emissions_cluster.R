@@ -1,36 +1,28 @@
-rm(list = ls())
+# rm(list = ls())
 
 library(dplyr)
 
 # ==============================================================================
 # SETUP AND DATA LOADING
 # ==============================================================================
+date <- "2026-02-27"
+check_outl <- "TRUE"
+out_scale <- 10
+tau <- "1.92072941034706" #  or 3.31744830051061
+prior <- "imom"
+c0 <- C0 <- "auto"
+modprior <- "bern"
+v0 <- "0.5"
 
-config <- list(
-  ssvs_settings = data.frame(
-    sis_prior = c("imom"),
-    tau = sapply(c(0.05), priorp2g, q = 1, prior = c("iMom")), 
-    beta_prior = c("f"),
-    incl_prior = c("bern"),
-    stringsAsFactors = FALSE
-  ),
-  gets_settings = data.frame(
-    gets_lvl = c(0.05)
-  ),
-  date = "2026-02-27"
-)
-
-
-bisam_path <- sprintf("./output/emissions/%s/ssvs_tau-%s_prior-%s_c0-auto_C0-auto_modprior-%s_v0-0.5.RDS", 
-                      config$date, 
-                      config$ssvs_settings$tau, 
-                      config$ssvs_settings$sis_prior, 
-                      config$ssvs_settings$incl_prior) 
+bisam_path <- sprintf("./output/emissions/%s/ssvs_checkOutlier-%s_outscale-%s_tau-%s_prior-%s_c0-%s_C0-%s_modprior-%s_v0-%s.RDS", 
+                      date, check_outl, out_scale, tau, prior, c0, C0, modprior, v0) 
 
 bisam_results <- readRDS(bisam_path)
 
+plot(bisam_results$coefs$iis, main = paste0("OUTLIER SCALE = ", out_scale), ylab = "IIS PIPs")
+
 gets_results_05 <- readRDS(sprintf("./output/emissions/%s/gets_0.05.RDS", 
-                                   config$date))
+                                   date))
 
 # ==============================================================================
 # FUNCTION DEFINITIONS
@@ -141,14 +133,12 @@ COLORS <- list(
 )
 
 
-pdf(sprintf("./output/emissions/%s/multi_tau-%s_prior-%s_modprior-%s.pdf",
-            config$date,
-            config$ssvs_settings$tau, 
-            config$ssvs_settings$sis_prior, 
-            config$ssvs_settings$incl_prior),
+pdf(sprintf("./output/emissions/%s/multi_checkOutlier-%s_outscale-%s_tau-%s_prior-%s.pdf",
+            date, check_outl, out_scale, tau, prior),
     width = 18, height = 8, onefile = TRUE)
 
-# Break plot up in three blocks
+# Break up in three blocks
+
 c_list <- list(c("Germany", "Spain", "France", "United Kingdom", "Italy"),
                c("Austria", "Belgium", "Netherlands", "Portugal", "Sweden"),
                c("Denmark", "Finland", "Greece", "Ireland", "Luxembourg"))
@@ -207,6 +197,24 @@ for(cc in seq_len(length(c_list))) {
     xaxt = "n",
     frame.plot = FALSE
   )
+
+  # # Add uncertainty band
+  # uncertainty <- apply(mod$draws$omega, 2, quantile, c(0.25, 0.75))
+  # uncertainty <- uncertainty[,which(grepl(paste0(cN, collapse = "|"), colnames(uncertainty)))]
+  # for(i in 1:n_mod) {
+  #   start_idx <- if(i == 1) 1 else (i-1) * (t_mod - 3) + 1
+  #   end_idx <- i * (t_mod - 3)
+  #   plot_start <- start_idx + (i - 1)
+  #   plot_end <- end_idx + (i - 1)
+  #   x_seg <- plot_start:plot_end
+  #
+  #   polygon(
+  #     c(x_seg, rev(x_seg)),
+  #     c(uncertainty[1, start_idx:end_idx], rev(uncertainty[2, start_idx:end_idx])),
+  #     col = rgb(0.68, 0.85, 0.9, 0.3),
+  #     border = NA
+  #   )
+  # }
 
   cN_idx <- data.frame(unit = cN, unit_idx = seq_len(length(cN)))
   
@@ -301,6 +309,18 @@ for(cc in seq_len(length(c_list))) {
     points(x = gets_indices_plot, y = omega_plot[gets_indices_plot],
            pch = 4, col = COLORS$gets01, lwd = 2.5, cex = 1.5)
   }
+  
+  # gets_indices05 <- (1:(n_mod * (t_mod - 3)))[
+  #   str_extract(names(omega_with_breaks), "(?<=sis\\.).+") %in%
+  #     str_extract(rownames(gets_coefs05), "(?<=fesis).+")
+  # ]
+  # if (length(gets_indices05) > 0) {
+  #   gets_indices05_plot <- gets_indices05 + sapply(gets_indices05, function(x) {
+  #     sum(country_boundaries_a < x)
+  #   })
+  #   points(x = gets_indices05_plot, y = omega_plot[gets_indices05_plot],
+  #          pch = 4, col = COLORS$gets01, lwd = 2.5, cex = 1.2)
+  # }
 
   # Add country labels
   midpoints_a <- sapply(1:n_mod, function(i) {
@@ -433,6 +453,15 @@ for(cc in seq_len(length(c_list))) {
   # Draw fitted line
   lines(x_coords_b, y_fitted_plot, col = COLORS$fit, lwd = 2)
 
+  # # Mark detected outliers
+  # outlier_indices_orig <- (1:N_mod)[mod$coefs$iis >= PIP_THRESHOLD]
+  # if(length(outlier_indices_orig) > 0) {
+  #   outlier_indices_plot <- outlier_indices_orig + sapply(outlier_indices_orig, function(x) {
+  #     sum(country_boundaries_b < x)
+  #   })
+  #   abline(v = outlier_indices_plot, col = COLORS$outl_marker, lty = 2, lwd = 1.5)
+  # }
+
   # Overlay observed points
   points(
     x_coords_b, y_plot,
@@ -474,9 +503,20 @@ for(cc in seq_len(length(c_list))) {
     text = bquote("Panel B: Fitted values of y"),
     adj = 0, font = 2, cex = 1.5
   )
+
+  # Add overall title
+  # mtext(
+  #   text = bquote("Transport Emissions Breaks"),
+  #   side = 3,
+  #   line = 0.5,
+  #   outer = TRUE,
+  #   cex = 2,
+  #   font = 2
+  # )
 }
 
 dev.off()
+
 
 
 # ==============================================================================
