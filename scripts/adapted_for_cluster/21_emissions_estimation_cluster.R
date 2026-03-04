@@ -32,13 +32,13 @@ config <- list(
     sis_prior = c("imom"),
     tau = sapply(c(0.01, 0.05), priorp2g, q = 1, prior = c("iMom")), 
     check_outl = c(TRUE, FALSE),
-    out_scale = c(10, 25, 50, 10^2, 10^3),
+    out_scale = c(10, 25, 50, 10^2, 250, 500, 10^3, 2500, 10^4),
     beta_prior = c("f"),
     incl_prior = c("bern"),
     stringsAsFactors = FALSE
   ),
   gets_lvl = c(0.05, 0.01), # just use the setting as done by Koch et al (2022)
-  date = "2026-02-27"
+  date = "2026-03-04"
 )
 
 if(is_slurm) {

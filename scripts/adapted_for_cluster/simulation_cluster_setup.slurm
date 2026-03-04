@@ -19,5 +19,5 @@ echo "Allocated hosts: $SLURM_JOB_NODELIST"
 module load r-4.5.1-gcc-12.2.0-tfchyxd
 
 # Run the R script with array task ID and count
-srun Rscript 01_estimation_gets_bisam_comparison_SD.R $SLURM_ARRAY_TASK_ID
+srun Rscript 11_simulation_estimation.R $SLURM_ARRAY_TASK_ID
 
