@@ -172,11 +172,11 @@ STEP_INCL_PRIOR <- "bern"
 # Advanced options
 DO_SPLIT_Z <- TRUE
 DO_CLUSTER_S2 <- FALSE
-DO_CHECK_OUTLIER <- FALSE
+DO_CHECK_OUTLIER <- TRUE
 # Outlier detection options
 OUTLIER_INCL_ALPHA <- 1
 OUTLIER_INCL_BETA <- 10
-OUTLIER_SCALE <- 10
+OUTLIER_SCALE <- 20
 # Set computational strategy
 DO_SPARSE_COMPUTATION <- FALSE
 # Check model Validity
@@ -267,10 +267,10 @@ n_mod <- mod$meta$sample['n']
 N_mod <- mod$meta$sample['N']
 
 # Color palette
-COL_MAIN <- "#2166AC"    # Blue
-COL_STEP <- "#B2182B"    # Red
-COL_FIT  <- "#1B9E77"    # Teal
-COL_IIS  <- "#762A83"    # Purple
+COL_MAIN <- "#2166AC"
+COL_STEP <- "#B2182B"
+COL_FIT  <- "#1B9E77"
+COL_IIS  <- "#762A83"
 COL_GRID <- "gray70"
 
 pdf(sprintf("./output/simulation/appendix_fig_%s.pdf", setup_type),
@@ -278,7 +278,7 @@ pdf(sprintf("./output/simulation/appendix_fig_%s.pdf", setup_type),
 
 par(
   mfrow = c(2, 1),
-  mar  = c(1, 4.5, 1.5, 1),
+  mar  = c(1, 4.5, 1.5, 4.5),   # <-- right margin = 4.5 for BOTH panels from the start
   oma  = c(1, 0, 2, 0),
   cex.axis = 1,
   cex.lab  = 1.25,
@@ -292,8 +292,8 @@ omega_with_breaks <- mod$coefs$omega
 omega_plot <- rep(NA, length(data[, 3]))
 current_pos <- 1
 for(i in 1:n_mod) {
-  start_idx <- (i-1) * (t_mod) + 3
-  end_idx   <- i * (t_mod) - 1
+  start_idx      <- (i-1) * (t_mod) + 3
+  end_idx        <- i * (t_mod) - 1
   segment_length <- end_idx - start_idx + 1
   
   omega_plot[start_idx:end_idx] <- omega_with_breaks[current_pos:(current_pos + segment_length - 1)]
@@ -316,8 +316,11 @@ plot(
 )
 
 abline(h = c(0, 0.25, 0.5, 0.75, 1), lty = 3, col = COL_GRID, lwd = 0.8)
-abline(v = 0:Ni * Nt,  lty = 2, col = COL_GRID, lwd = 0.8)
-abline(v = POS_STEP,   lty = 2, col = COL_STEP,  lwd = 1)
+abline(v = 0:Ni * Nt, lty = 2, col = COL_GRID, lwd = 0.8)
+abline(v = POS_STEP,  lty = 2, col = COL_STEP,  lwd = 1)
+
+# Blank right axis — keeps plot region width identical to Panel B
+axis(side = 4, labels = FALSE, tick = FALSE)
 
 legend(
   "topright",
@@ -340,11 +343,10 @@ text(x = midpoints_a, y = 0,
      pos = 1, xpd = TRUE, cex = 1.25)
 
 # ---- Plot 2: Response variable + IIS on secondary y-axis ----
-par(mar = c(3, 4.5, 0.5, 4.5))   # right margin expanded for secondary axis
+par(mar = c(3, 4.5, 0.5, 4.5))   # explicit, matches Panel A exactly
 
 iis_probs <- mod$coefs$iis
 
-# Primary axis: observed y
 plot(
   data[, 3],
   cex  = 0.6,
@@ -369,15 +371,11 @@ for (start in seq(1, n_fit, by = 30)) {
         col = scales::alpha(COL_FIT,  0.75), lwd = 2)
 }
 
-# Secondary axis: IIS probabilities
-# Scale IIS [0,1] into the y-range of the primary plot
-y_range <- range(data[, 3], na.rm = TRUE)
-y_lo    <- y_range[1]
-y_hi    <- y_range[2]
-
+y_range   <- range(data[, 3], na.rm = TRUE)
+y_lo      <- y_range[1]
+y_hi      <- y_range[2]
 iis_scaled <- y_lo + iis_probs * (y_hi - y_lo)
 
-# Draw IIS spikes in the scaled coordinate space
 segments(
   x0  = seq_along(iis_probs),
   y0  = y_lo,
@@ -387,20 +385,18 @@ segments(
   lwd = 1.2
 )
 
-# Add the secondary axis (right side)
 axis(
-  side = 4,
-  at   = y_lo + c(0, 0.25, 0.5, 0.75, 1) * (y_hi - y_lo),
-  labels = c("0", "0.25", "0.5", "0.75", "1"),
+  side     = 4,
+  at       = y_lo + c(0, 0.25, 0.5, 0.75, 1) * (y_hi - y_lo),
+  labels   = c("0", "0.25", "0.5", "0.75", "1"),
   col.axis = COL_IIS,
   col      = COL_IIS,
-  las = 1
+  las      = 1
 )
 mtext(side = 4, line = 3.2, text = "Outlier Prob.",
       col = COL_IIS, cex = 1.25, las = 0)
 
-# Threshold line at 0.5 in scaled coordinates
-abline(h = y_lo + 0.5 * (y_hi - y_lo),
+abline(h   = y_lo + 0.5 * (y_hi - y_lo),
        lty = 3, col = adjustcolor(COL_IIS, alpha.f = 0.6), lwd = 0.8)
 
 legend(
@@ -421,14 +417,14 @@ legend(
   bg  = "white"
 )
 
-mtext(side = 3, line = -0.3, text = "Panel B: Fitted values of y & outlier probabilities",
+mtext(side = 3, line = -0.3,
+      text = "Panel B: Fitted values of y & outlier probabilities",
       adj = 0, font = 2, cex = 1.5)
 
 text(x = midpoints_a, y = min(data[, 3], na.rm = TRUE),
      labels = paste0("Unit ", seq_len(Ni)),
      pos = 1, xpd = TRUE, cex = 1.25)
 
-# Overall title
 title(
   main = bquote(
     "Step size: " ~
