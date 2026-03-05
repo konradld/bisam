@@ -316,28 +316,6 @@ estimate_bisam <- function(
   }
   obs_with_steps <- unique(ceiling(steps_to_check / (t - 3)))
   
-  # bespoke univariate iMom function
-  log_dimom <- function(x, gamma0, k, nu, tau, sigma2) {
-    stopifnot(k > 0, nu > 0, tau > 0, sigma2 > 0)
-    
-    z      <- x - gamma0
-    result <- rep(-Inf, length(z))
-    valid  <- z != 0
-    
-    if (any(valid)) {
-      lz        <- log(abs(z[valid]))
-      log_scale <- 0.5 * log(tau * sigma2)
-      
-      const <- log(k) +
-        (nu / 2) * log(tau * sigma2) -
-        lgamma(nu / (2 * k))
-      
-      result[valid] <- const -
-        (nu + 1) * lz -
-        exp(-2 * k * (lz - log_scale))
-    }
-    result
-  }
   # ============================================================================
   # GIBBS SAMPLER
   # ============================================================================
@@ -666,10 +644,9 @@ estimate_bisam <- function(
 
 #===============================================================================
 #
-#                  Helper Funcions for inv. Gamma spec
+#                  Helper Function for inv. Gamma spec
 #
 #===============================================================================
-
 # Single quantile constraint: P(X <= x) = p
 inv_gamma_params <- function(shape = 3, x, p = 0.9) {
   require(invgamma)
@@ -705,7 +682,7 @@ inv_gamma_params_dual <- function(x1, p1, x2, p2) {
 
 #===============================================================================
 #
-#                  Helper Funcions for inverting BN
+#                  Helper Function for inverting BN
 #
 #===============================================================================
 safe_invert <- function(m, do_sparse_computation = TRUE) {
@@ -726,4 +703,31 @@ safe_invert <- function(m, do_sparse_computation = TRUE) {
       Matrix::solve(nearPD(if (do_sparse_computation) m else as.matrix(m), corr = FALSE, keepDiag = TRUE)$mat)
     })
   })
+}
+
+#===============================================================================
+#
+#                  Helper Function for computing log density of imom
+#
+#===============================================================================
+log_dimom <- function(x, gamma0, k, nu, tau, sigma2) {
+  stopifnot(k > 0, nu > 0, tau > 0, sigma2 > 0)
+  
+  z      <- x - gamma0
+  result <- rep(-Inf, length(z))
+  valid  <- z != 0
+  
+  if (any(valid)) {
+    lz        <- log(abs(z[valid]))
+    log_scale <- 0.5 * log(tau * sigma2)
+    
+    const <- log(k) +
+      (nu / 2) * log(tau * sigma2) -
+      lgamma(nu / (2 * k))
+    
+    result[valid] <- const -
+      (nu + 1) * lz -
+      exp(-2 * k * (lz - log_scale))
+  }
+  result
 }
