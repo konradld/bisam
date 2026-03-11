@@ -5,12 +5,12 @@
 # 
 ################################################################################
 
-rm(list = ls())
+# rm(list = ls())
 
 #===============================================================================
 #           Which Figure to replicate (see paper for numbering)
                       FIGURE <- 5
-                      DATE <- "2026-02-27"
+                      DATE <- "2026-03-06"
 #===============================================================================
 
 # ==============================================================================
@@ -154,7 +154,7 @@ COLORS <- list(
 )
 
 
-pdf("./output/emissions/figure_5.pdf",
+pdf(sprintf("./output/emissions/%s/figure_5.pdf", config$date),
     width = 20, height = 7, onefile = TRUE)
 
 # Break plot up in three blocks

@@ -5,9 +5,9 @@ library(dplyr)
 # ==============================================================================
 # SETUP AND DATA LOADING
 # ==============================================================================
-date <- "2026-02-27"
+date <- "2026-03-06_dnorm"
 check_outl <- "TRUE"
-out_scale <- 10
+out_scale <- 5
 tau <- "1.92072941034706" #  or 3.31744830051061
 prior <- "imom"
 c0 <- C0 <- "auto"
@@ -23,6 +23,10 @@ plot(bisam_results$coefs$iis, main = paste0("OUTLIER SCALE = ", out_scale), ylab
 
 gets_results_05 <- readRDS(sprintf("./output/emissions/%s/gets_0.05.RDS", 
                                    date))
+
+bisam_results$coefs$iis[which(bisam_results$coefs$iis > .5)]
+
+gets_results_05$retained.indicators$impulses
 
 # ==============================================================================
 # FUNCTION DEFINITIONS
@@ -110,6 +114,7 @@ rownames(lux_man) <- "fesisLuxembourg.2015"
 gets_coefs <- rbind(gets_coefs05, lux_man)
 rownames(gets_coefs) <- gsub("UnitedKingdom", "United Kingdom", rownames(gets_coefs))
 
+gets_outlier05 <- gets_results_05$retained.indicators$impulses
 
 # Parameters
 PIP_THRESHOLD <- 0.5
@@ -169,6 +174,12 @@ for(cc in seq_len(length(c_list))) {
   # Create omega vector with NAs at country boundaries
   omega_with_breaks <- mod$coefs$omega
   omega_with_breaks <- omega_with_breaks[which(grepl(paste0(cN, collapse = "|"), names(omega_with_breaks)))]
+  
+  if(check_outl) {
+    iis <- mod$coefs$iis
+    iis <- iis[which(grepl(paste0(cN, collapse = "|"), names(iis)))]
+  }
+  
   country_boundaries_a <- (1:(n_mod - 1)) * (t_mod - 3)
 
   omega_plot <- rep(NA, length(omega_with_breaks) + (n_mod - 1))
@@ -284,7 +295,6 @@ for(cc in seq_len(length(c_list))) {
 
   # Mark detected breaks
   break_indices_orig <- (1:(n_mod * (t_mod - 3)))[omega_with_breaks >= PIP_THRESHOLD]
-  
   if(length(break_indices_orig) > 0) {
     break_indices_plot <- break_indices_orig + sapply(break_indices_orig, function(x) {
       sum(country_boundaries_a < x)
@@ -295,6 +305,8 @@ for(cc in seq_len(length(c_list))) {
       col = COLORS$step, lty = 2, lwd = 1.5
     )
   }
+  
+  
   
   # Add GETS detections
   gets_indices <- (1:(n_mod * (t_mod - 3)))[
@@ -453,14 +465,31 @@ for(cc in seq_len(length(c_list))) {
   # Draw fitted line
   lines(x_coords_b, y_fitted_plot, col = COLORS$fit, lwd = 2)
 
-  # # Mark detected outliers
-  # outlier_indices_orig <- (1:N_mod)[mod$coefs$iis >= PIP_THRESHOLD]
-  # if(length(outlier_indices_orig) > 0) {
-  #   outlier_indices_plot <- outlier_indices_orig + sapply(outlier_indices_orig, function(x) {
-  #     sum(country_boundaries_b < x)
-  #   })
-  #   abline(v = outlier_indices_plot, col = COLORS$outl_marker, lty = 2, lwd = 1.5)
-  # }
+  # Mark detected outliers
+  if(check_outl) {
+    outlier_indices_orig <- (1:(n_mod * t_mod))[iis >= PIP_THRESHOLD]
+    if(length(outlier_indices_orig) > 0) {
+      outlier_indices_plot <- outlier_indices_orig + sapply(outlier_indices_orig, function(x) {
+        sum(country_boundaries_b < x)
+      })
+      abline(v = outlier_indices_plot, col = COLORS$outl_marker, lty = 2, lwd = 1.5)
+    }
+    
+    gets_indices <- (1:(n_mod * (t_mod)))[
+      str_extract(names(iis), "(?<=iis\\.).+") %in%
+        str_extract(rownames(gets_outlier05), ".+(?=\\.)")
+    ]
+    
+    if (length(gets_indices) > 0) { # maybe differentiate cross color by sign of break?
+      gets_indices_plot <- gets_indices + sapply(gets_indices, function(x) {
+        sum(country_boundaries_b < x)
+      })
+      points(x = gets_indices_plot, y = y_plot[gets_indices_plot],
+             pch = 4, col = COLORS$gets05, lwd = 2.5, cex = 1.5)
+    }
+    
+    
+  }
 
   # Overlay observed points
   points(
@@ -469,15 +498,32 @@ for(cc in seq_len(length(c_list))) {
     pch = 19,
     col = adjustcolor(COLORS$main, alpha.f = 0.4)
   )
-
+  
+  # # mark outliers
+  # if(check_outl == "TRUE") {
+  #   iis_indices <- (1:(n_mod * t_mod))[iis >= PIP_THRESHOLD]
+  #   if(length(iis_indices) > 0) {
+  #     iis_indices <- iis_indices + sapply(iis_indices, function(x) {
+  #       sum(country_boundaries_b < x)
+  #     })
+  #     points(x = iis_indices, y = temp_y[iis_indices],
+  #            pch = 3, col = COLORS$gets01, lwd = 2.5, cex = 1.5)
+  #     # segments(
+  #     #   x0 = iis_indices, y0 = min(lower_plot, na.rm = T),
+  #     #   x1 = iis_indices, y1 = max(upper_plot, na.rm = T),
+  #     #   col = COLORS$step, lty = 2, lwd = 1.5
+  #     # )
+  #   }
+  # }
+  
   # Add legend
   legend(
     "topright",
-    legend = c("Observed", "BISAM-fit"), # , "Detected Outlier"
-    col = c(adjustcolor(COLORS$main, alpha.f = 0.9), COLORS$fit), #, COLORS$outl_marker
-    pch = c(19, NA, NA),
-    lty = c(NA, 1, 2),
-    lwd = c(NA, 2, 2),
+    legend = if(check_outl == "TRUE") c("Observed", "BISAM-fit", "BISAM-Outlier", "GETS-Outlier") else c("Observed", "BISAM-fit"), # 
+    col = if(check_outl == "TRUE") c(adjustcolor(COLORS$main, alpha.f = 0.9), COLORS$fit, COLORS$outl_marker, COLORS$gets05) else c(adjustcolor(COLORS$main, alpha.f = 0.9), COLORS$fit), #
+    pch = c(19, NA, NA, 4),
+    lty = c(NA, 1, 2, NA),
+    lwd = c(NA, 2, 2, 2.5),
     cex = 1.25,
     bg = adjustcolor("white", alpha.f = 0.5)
   )
