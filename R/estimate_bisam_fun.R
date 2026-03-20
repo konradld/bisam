@@ -526,9 +526,8 @@ estimate_bisam <- function(
         # verbose = FALSE
       )
       
-      # w_i[p_idx_rand] <- as.logical(w_i_mod$postSample) #!!!!!!!!!!!!!!
-      w_i[p_idx_rand] <- as.logical(w_i_mod)
-      # pip_i[p_idx_rand] <- w_i_mod$margpp #!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      w_i[p_idx_rand] <- as.logical(w_i_mod$post_sample)
+      pip_i[p_idx_rand] <- w_i_mod$margpp
       
       # ========================================================================
       # DRAW p(gamma | omega, beta, sigma^2, y) - Break Magnitudes
