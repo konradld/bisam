@@ -38,7 +38,7 @@ config <- list(
   gets_settings = data.frame(
     gets_lvl = c(0.01,0.05)
   ),
-  date = "2026-02-27"
+  date = "2026-03-04"
 )
 
 if(is_slurm) {
@@ -108,7 +108,7 @@ STEP_INCL_BETA <- 1
 DO_INDICATOR_SATURATION <- TRUE
 OUTLIER_INCL_ALPHA <- 1
 OUTLIER_INCL_BETA <- 10
-OUTLIER_SCALE <- 10^3
+OUTLIER_SCALE <- 10
 
 # Advanced options
 DO_SPLIT_Z <- TRUE
