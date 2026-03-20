@@ -229,10 +229,12 @@ estimate_bisam <- function(
   
   # --- Inclusion Prior ---
   if (step_incl_prior == "bern") {
-    incl_prior_f <- mombf::modelbinomprior(step_incl_prob)
+    # incl_prior_f <- mombf::modelbinomprior(step_incl_prob) #!!!!!!!!!!!!!!!!!!
+    incl_prior_f <- BISAM::modelbinomprior(step_incl_prob)
     cat("Inclusion prior is Bernoulli(step_incl_prob) - 'step_incl_alpha' and 'step_incl_beta' have no meaning\n")
   } else if (step_incl_prior == "beta_bern") {
-    incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta)
+    # incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # !!!!!!!!!!
+    incl_prior_f <- BISAM::modelbbprior(step_incl_alpha, step_incl_beta)
     cat("Inclusion prior is Beta-Bernoulli(step_incl_alpha, step_incl_beta) - 'step_incl_prob' has no meaning\n")
   }
   
@@ -456,40 +458,77 @@ estimate_bisam <- function(
         Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE]
       }
       
+      # # Model selection using mombf
+      # w_i_mod <- mombf::modelSelection(
+      #   y = y_tmp_sd[n_idx],
+      #   x = Z_std_j,
+      #   groups = 1:length(p_idx),
+      #   nknots = 9,
+      #   center = FALSE,
+      #   scale = FALSE,
+      #   enumerate = FALSE,
+      #   includevars = rep(FALSE, length(p_idx)),
+      #   niter = nn,
+      #   thinning = 1,
+      #   burnin = nn - 1,
+      #   family = "normal",
+      #   priorCoef = sis_prior_f,
+      #   priorDelta = incl_prior_f,
+      #   phi = 1,
+      #   deltaini = w_i[p_idx_rand],
+      #   initSearch = 'none',
+      #   method = 'ALA',
+      #   hess = "asymp",
+      #   initpar = initpar,
+      #   adj.overdisp = 'intercept',
+      #   optimMethod = "auto",
+      #   optim_maxit = 10,
+      #   B = 10^5,
+      #   priorVar = var_prior_f,
+      #   priorSkew = momprior(tau = step_size_scale),
+      #   XtXprecomp = TRUE,
+      #   verbose = FALSE
+      # )
+      
       # Model selection using mombf
-      w_i_mod <- mombf::modelSelection(
+      w_i_mod <- BISAM::fast_model_selection(
         y = y_tmp_sd[n_idx],
         x = Z_std_j,
-        groups = 1:length(p_idx),
-        nknots = 9,
+        # groups = 1:length(p_idx),
+        # nknots = 9,
         center = FALSE,
         scale = FALSE,
-        enumerate = FALSE,
-        includevars = rep(FALSE, length(p_idx)),
+        # enumerate = FALSE,
+        # includevars = rep(FALSE, length(p_idx)),
         niter = nn,
         thinning = 1,
         burnin = nn - 1,
-        family = "normal",
-        priorCoef = sis_prior_f,
+        # family = "normal",
+        # priorCoef = sis_prior_f@priorPars["tau"],
+        tau = sis_prior_f@priorPars["tau"],
         priorDelta = incl_prior_f,
         phi = 1,
+        thinit = g_i[p_idx_rand],
+        initpar_type = 0,
         deltaini = w_i[p_idx_rand],
-        initSearch = 'none',
-        method = 'ALA',
-        hess = "asymp",
-        initpar = initpar,
-        adj.overdisp = 'intercept',
-        optimMethod = "auto",
+        # initSearch = 'none',
+        method = 2, #'ALA', !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        hess = 1, #"asymp", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # initpar = initpar,
+        # adj.overdisp = 'intercept',
+        optimMethod = 2, #"auto", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         optim_maxit = 10,
         B = 10^5,
-        priorVar = var_prior_f,
-        priorSkew = momprior(tau = step_size_scale),
-        XtXprecomp = TRUE,
-        verbose = FALSE
+        # priorVar = var_prior_f,
+        priorSkew = momprior(tau = step_size_scale)@priorPars["tau"],
+        computation_strategy = BISAM::STANDARD(),
+        XtXprecomp = TRUE#,
+        # verbose = FALSE
       )
       
-      w_i[p_idx_rand] <- as.logical(w_i_mod$postSample)
-      pip_i[p_idx_rand] <- w_i_mod$margpp
+      # w_i[p_idx_rand] <- as.logical(w_i_mod$postSample) #!!!!!!!!!!!!!!
+      w_i[p_idx_rand] <- as.logical(w_i_mod)
+      # pip_i[p_idx_rand] <- w_i_mod$margpp #!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       
       # ========================================================================
       # DRAW p(gamma | omega, beta, sigma^2, y) - Break Magnitudes
@@ -511,9 +550,9 @@ estimate_bisam <- function(
         g_draw[1, c(colsel, t - 2)] <- rnlp_new( # the t-2 is for the sigma^2 that is thrown away if sigma is known
           y = y_rnlp,
           x = z_rnlp,
-          priorCoef = w_i_mod$priors$priorCoef,
-          priorGroup = w_i_mod$priors$priorGroup,
-          priorVar = w_i_mod$priors$priorVar,
+          priorCoef = sis_prior_f,
+          priorGroup = sis_prior_f,
+          priorVar = var_prior_f,
           isgroup = rep(FALSE, length(colsel)),
           niter = ngburn + ngdraw,
           burnin = ngburn,
