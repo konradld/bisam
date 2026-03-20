@@ -220,6 +220,7 @@ outlier_incl_beta = OUTLIER_INCL_BETA
 outlier_scale = OUTLIER_SCALE
 do_sparse_computation = DO_SPARSE_COMPUTATION
 do_geweke_test = DO_GEWEKE_TEST
+steps_to_check = "all"
 
 mod <- estimate_bisam(
   data = data,
