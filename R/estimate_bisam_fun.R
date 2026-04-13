@@ -229,12 +229,12 @@ estimate_bisam <- function(
   
   # --- Inclusion Prior ---
   if (step_incl_prior == "bern") {
-    # incl_prior_f <- mombf::modelbinomprior(step_incl_prob) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    incl_prior_f <- BISAM::modelbinomprior(step_incl_prob)
+    # incl_prior_f <- mombf::modelbinomprior(step_incl_prob) # change for Jakob!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    incl_prior_f <- BISAM::modelbinomprior(step_incl_prob) # change for Jakob
     cat("Inclusion prior is Bernoulli(step_incl_prob) - 'step_incl_alpha' and 'step_incl_beta' have no meaning\n")
   } else if (step_incl_prior == "beta_bern") {
-    # incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    incl_prior_f <- BISAM::modelbbprior(step_incl_alpha, step_incl_beta)
+    # incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    incl_prior_f <- BISAM::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob
     cat("Inclusion prior is Beta-Bernoulli(step_incl_alpha, step_incl_beta) - 'step_incl_prob' has no meaning\n")
   }
   
@@ -458,7 +458,7 @@ estimate_bisam <- function(
         Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE]
       }
       
-      # # Model selection using mombf
+      # # Model selection using mombf # change for Jakob
       # w_i_mod <- mombf::modelSelection(
       #   y = y_tmp_sd[n_idx],
       #   x = Z_std_j,
@@ -490,7 +490,7 @@ estimate_bisam <- function(
       #   verbose = FALSE
       # )
       
-      # Model selection using BISAM
+      # Model selection using BISAM # change for Jakob
       w_i_mod <- BISAM::fast_model_selection(
         y = y_tmp_sd[n_idx],
         x = Z_std_j,
@@ -526,8 +526,8 @@ estimate_bisam <- function(
         # verbose = FALSE
       )
       
-      # w_i[p_idx_rand] <- as.logical(w_i_mod$postSample)
-      w_i[p_idx_rand] <- as.logical(w_i_mod$post_sample)
+      # w_i[p_idx_rand] <- as.logical(w_i_mod$postSample) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      w_i[p_idx_rand] <- as.logical(w_i_mod$post_sample) # change for Jakob
       pip_i[p_idx_rand] <- w_i_mod$margpp
       
       # ========================================================================
