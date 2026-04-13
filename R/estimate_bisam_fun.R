@@ -229,11 +229,11 @@ estimate_bisam <- function(
   
   # --- Inclusion Prior ---
   if (step_incl_prior == "bern") {
-    # incl_prior_f <- mombf::modelbinomprior(step_incl_prob) #!!!!!!!!!!!!!!!!!!
+    # incl_prior_f <- mombf::modelbinomprior(step_incl_prob) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     incl_prior_f <- BISAM::modelbinomprior(step_incl_prob)
     cat("Inclusion prior is Bernoulli(step_incl_prob) - 'step_incl_alpha' and 'step_incl_beta' have no meaning\n")
   } else if (step_incl_prior == "beta_bern") {
-    # incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # !!!!!!!!!!
+    # incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     incl_prior_f <- BISAM::modelbbprior(step_incl_alpha, step_incl_beta)
     cat("Inclusion prior is Beta-Bernoulli(step_incl_alpha, step_incl_beta) - 'step_incl_prob' has no meaning\n")
   }
@@ -490,7 +490,7 @@ estimate_bisam <- function(
       #   verbose = FALSE
       # )
       
-      # Model selection using mombf
+      # Model selection using BISAM
       w_i_mod <- BISAM::fast_model_selection(
         y = y_tmp_sd[n_idx],
         x = Z_std_j,
@@ -513,10 +513,10 @@ estimate_bisam <- function(
         deltaini = w_i[p_idx_rand],
         # initSearch = 'none',
         method = 2, #'ALA', !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        hess = 1, #"asymp", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        hesstype = 1, #"asymp", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # initpar = initpar,
         # adj.overdisp = 'intercept',
-        optimMethod = 2, #"auto", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        optimMethod = 0, #"auto", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         optim_maxit = 10,
         B = 10^5,
         # priorVar = var_prior_f,
@@ -526,6 +526,7 @@ estimate_bisam <- function(
         # verbose = FALSE
       )
       
+      # w_i[p_idx_rand] <- as.logical(w_i_mod$postSample)
       w_i[p_idx_rand] <- as.logical(w_i_mod$post_sample)
       pip_i[p_idx_rand] <- w_i_mod$margpp
       
