@@ -28,6 +28,14 @@ estimate_bisam <- function(
     cred_int = 0.95,
     do_split_Z = TRUE,
     do_cluster_s2 = FALSE,
+    do_sv = FALSE,               # stochastic volatility: one AR(1) log-variance process per unit over time
+    sv_prior_mu_mean = NULL,     # SV level prior mean (NULL -> data-driven log(OLS variance))
+    sv_prior_mu_var = 100,       # SV level prior variance
+    sv_prior_phi_a = 20,         # SV persistence prior: (phi + 1) / 2 ~ Beta(sv_prior_phi_a, sv_prior_phi_b)
+    sv_prior_phi_b = 1.5,
+    sv_prior_sigma_shape = 2.5,  # SV vol-of-vol prior: sigma^2_eta ~ InvGamma(shape, rate)
+    sv_prior_sigma_rate = 0.025,
+    sv_backend = c("internal", "stochvol"), # SV sampler: hand-rolled KSC/FFBS ("internal") or stochvol::update_fast_sv ("stochvol")
     do_check_outlier = FALSE,
     outlier_incl_alpha = 1,     # P(outlier) ~ Beta(outlier_incl_alpha, outlier_incl_beta)
     outlier_incl_beta = 10,     # P(outlier) ~ Beta(outlier_incl_alpha, outlier_incl_beta)
@@ -149,6 +157,23 @@ estimate_bisam <- function(
   # PRIOR SPECIFICATION
   # ============================================================================
   
+  # --- Stochastic volatility compatibility checks ---
+  if (do_sv) {
+    sv_backend <- match.arg(sv_backend)
+    if (sv_backend == "stochvol" && !requireNamespace("stochvol", quietly = TRUE)) {
+      stop("sv_backend = 'stochvol' requires the 'stochvol' package. ",
+           "Install it (install.packages('stochvol')) or use sv_backend = 'internal'.")
+    }
+    if (do_cluster_s2) {
+      warning("do_sv = TRUE overrides do_cluster_s2: stochastic volatility already provides ",
+              "one unit-specific variance process over time. Setting do_cluster_s2 = FALSE.")
+      do_cluster_s2 <- FALSE
+    }
+    if (do_geweke_test) {
+      stop("do_geweke_test is only implemented for the constant-variance sampler, not for do_sv.")
+    }
+  }
+  
   # --- Sigma^2 Prior ---
   if (is.null(sigma2_shape) | is.null(sigma2_rate)) {
     print("Sigma^2 prior is inadmissable. Using default spec. based on OLS")
@@ -229,12 +254,12 @@ estimate_bisam <- function(
   
   # --- Inclusion Prior ---
   if (step_incl_prior == "bern") {
-    # incl_prior_f <- mombf::modelbinomprior(step_incl_prob) # change for Jakob!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    incl_prior_f <- BISAM::modelbinomprior(step_incl_prob) # change for Jakob
+    incl_prior_f <- mombf::modelbinomprior(step_incl_prob) # change for Jakob!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # incl_prior_f <- BISAM::modelbinomprior(step_incl_prob) # change for Jakob
     cat("Inclusion prior is Bernoulli(step_incl_prob) - 'step_incl_alpha' and 'step_incl_beta' have no meaning\n")
   } else if (step_incl_prior == "beta_bern") {
-    # incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    incl_prior_f <- BISAM::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob
+    incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # incl_prior_f <- BISAM::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob
     cat("Inclusion prior is Beta-Bernoulli(step_incl_alpha, step_incl_beta) - 'step_incl_prob' has no meaning\n")
   }
   
@@ -246,6 +271,54 @@ estimate_bisam <- function(
   g_incl_i <- rep(sd(y) / 100, r)  # Always non-zero for rnlp within Gibbs
   s2_i <- rep(1 / rgamma(1, shape = sigma2_shape, rate = sigma2_rate), N)
   sqrt_s2_i <- sqrt(s2_i)
+  
+  # --- Stochastic volatility state and hyperparameters ---
+  if (do_sv) {
+    # Data-driven initialisation of the per-unit log-variance level
+    if (!exists("mod_prior")) {
+      if (do_sparse_computation) {
+        mod_prior <- list()
+        mod_prior$coefficients <- MatrixModels:::lm.fit.sparse(X, y)
+        mod_prior$residuals <- as.vector(y - X %*% mod_prior$coefficients)
+      } else {
+        mod_prior <- lm.fit(X, y)
+      }
+    }
+    res0_mat  <- matrix(mod_prior$residuals, nrow = t, ncol = n)
+    sv_mu     <- log(pmax(colMeans(res0_mat^2), 1e-6)) # per-unit level (log-variance)
+    sv_phi    <- rep(0.95, n)                           # persistence
+    sv_sigma2 <- rep(0.05, n)                           # vol-of-vol (innovation variance of h)
+    sv_h      <- matrix(sv_mu, nrow = t, ncol = n, byrow = TRUE) # latent log-variance paths (t x n)
+    s2_i      <- as.vector(exp(sv_h))                   # per-observation variance, unit-major order
+    sqrt_s2_i <- sqrt(s2_i)
+    if (is.null(sv_prior_mu_mean)) sv_prior_mu_mean <- mean(sv_mu)
+    sv_priors <- list(
+      mu_mean   = sv_prior_mu_mean, mu_var  = sv_prior_mu_var,
+      phi_a     = sv_prior_phi_a,   phi_b   = sv_prior_phi_b,
+      sig_shape = sv_prior_sigma_shape, sig_rate = sv_prior_sigma_rate
+    )
+    
+    # --- stochvol backend: prior spec, expert settings and extra latent state ---
+    if (sv_backend == "stochvol") {
+      # stochvol's fast_sv sampler places a Gamma prior on sigma^2_eta (vol-of-vol).
+      # Match its prior mean to the internal InvGamma(shape, rate) mean = rate/(shape-1)
+      # so the two backends are comparable; keep stochvol's default Gamma shape of 0.5.
+      Bsigma <- if (sv_prior_sigma_shape > 1) {
+        sv_prior_sigma_rate / (sv_prior_sigma_shape - 1)
+      } else {
+        sv_prior_sigma_rate
+      }
+      sv_prior_spec <- stochvol::specify_priors(
+        mu     = stochvol::sv_normal(mean = sv_prior_mu_mean, sd = sqrt(sv_prior_mu_var)),
+        phi    = stochvol::sv_beta(shape1 = sv_prior_phi_a, shape2 = sv_prior_phi_b),
+        sigma2 = stochvol::sv_gamma(shape = 0.5, rate = 0.5 / Bsigma)
+      )
+      sv_expert <- stochvol::get_default_fast_sv()
+      sv_h0 <- sv_mu                            # per-unit initial log-variance state h_0
+      sv_r  <- matrix(5L, nrow = t, ncol = n)   # mixture-component indicators (resampled every sweep)
+    }
+  }
+  
   
   w_i <- logical(r)
   z_cols <- rep(1:ncol(z), n)
@@ -275,12 +348,26 @@ estimate_bisam <- function(
   # Main parameter storage
   b_store <- matrix(NA, nrow = Nstore, ncol = p)
   g_store <- matrix(NA, nrow = Nstore, ncol = r)
-  s2_store <- matrix(NA, nrow = Nstore, ncol = ifelse(do_cluster_s2, n, 1))
+  s2_store <- matrix(NA, nrow = Nstore, ncol = if (do_sv) N else if (do_cluster_s2) n else 1)
   
   colnames(b_store) <- colnames(X)
   colnames(g_store) <- colnames(Z)
-  colnames(s2_store) <- if (do_cluster_s2) paste0('sigma2_', unique(data[, i_index])) else 'sigma2'
-  
+  colnames(s2_store) <- if (do_sv) {
+    paste0("sigma2.", iis_grid[, "Var2"], ".", iis_grid[, "Var1"])
+  } else if (do_cluster_s2) {
+    paste0('sigma2_', unique(data[, i_index]))
+  } else {
+    'sigma2'
+  }
+  # Stochastic volatility hyperparameter storage (one AR(1) process per unit)
+  if (do_sv) {
+    sv_mu_store     <- matrix(NA, nrow = Nstore, ncol = n)
+    sv_phi_store    <- matrix(NA, nrow = Nstore, ncol = n)
+    sv_sigma2_store <- matrix(NA, nrow = Nstore, ncol = n)
+    colnames(sv_mu_store)     <- paste0("sv_mu.", n_ind)
+    colnames(sv_phi_store)    <- paste0("sv_phi.", n_ind)
+    colnames(sv_sigma2_store) <- paste0("sv_sigma2.", n_ind)
+  }
   # Selection indicator storage
   w_store <- matrix(NA, nrow = Nstore, ncol = r) # for step selection indicator
   pip_store <- matrix(NA, nrow = Nstore, ncol = r) # for step selection probability
@@ -360,7 +447,27 @@ estimate_bisam <- function(
     y_tmp <- y - Zg_i
     residuals <- y_tmp - Xb_i
     
-    if (do_cluster_s2) {
+    if (do_sv) {
+      # One AR(1) log-variance (stochastic volatility) process per unit over time.
+      # Feed the sampler the base residuals (outlier inflation lambda_i removed) so
+      # the SV process models the base variance. total variance stays s2_i * lambda_i.
+      res_for_sv <- residuals / sqrt(lambda_i)
+      res_mat    <- matrix(res_for_sv, nrow = t, ncol = n)
+      if (sv_backend == "stochvol") {
+        sv_upd  <- update_sv_stochvol(res_mat, sv_h, sv_h0, sv_r,
+                                      sv_mu, sv_phi, sv_sigma2,
+                                      sv_prior_spec, sv_expert)
+        sv_h0   <- sv_upd$h0
+        sv_r    <- sv_upd$r
+      } else {
+        sv_upd  <- update_sv(res_mat, sv_h, sv_mu, sv_phi, sv_sigma2, sv_priors)
+      }
+      sv_h       <- sv_upd$h
+      sv_mu      <- sv_upd$mu
+      sv_phi     <- sv_upd$phi
+      sv_sigma2  <- sv_upd$sigma2
+      s2_i       <- as.vector(exp(sv_h)) # base per-observation variance (unit-major order)
+    } else if (do_cluster_s2) {
       weighted_res2 <- matrix(residuals^2 / lambda_i, nrow = t, ncol = n)
       cN <- sigma2_shape + t / 2
       CN <- sigma2_rate + 0.5 * colSums(weighted_res2)
@@ -379,7 +486,7 @@ estimate_bisam <- function(
     # ==========================================================================
     if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso" || beta_prior == "f_indep") {
       
-      if (do_check_outlier || do_cluster_s2) {
+      if (do_check_outlier || do_cluster_s2 || do_sv) {
         XtW <- X / (s2_i * lambda_i)
         XtWX <- crossprod(XtW, X)
         XtWy <- crossprod(XtW, y_tmp)
@@ -422,7 +529,9 @@ estimate_bisam <- function(
     
     # Standardize for model selection:
     y_tmp_sd <- y_tmp / sqrt(s2_i * lambda_i)
-    s2_i_tmp <- if(do_cluster_s2) s2_i_unique else rep(s2_i_unique, n)
+    if (!do_sv) {
+      s2_i_tmp <- if (do_cluster_s2) s2_i_unique else rep(s2_i_unique, n)
+    }
     
     for (j in obs_with_steps) {
       
@@ -444,13 +553,22 @@ estimate_bisam <- function(
       }
       
       # Set variance prior
-      if (do_cluster_s2) {
+      if (do_sv) {
+        # y and Z are standardized below by the per-observation sqrt-variance, so the
+        # working residual variance is ~1: use a unit-scaled inverse-gamma prior (mean 1).
+        var_prior_f <- igprior(3, 2)
+      } else if (do_cluster_s2) {
         var_prior_f <- igprior(sigma2_shape[j], sigma2_rate[j])
       } else {
         var_prior_f <- igprior(sigma2_shape, sigma2_rate)
       }
       
-      if (do_check_outlier) {
+      if (do_sv) {
+        # Full GLS standardization by the time-varying (and outlier-inflated) variance,
+        # so the model-selection regression has unit-variance errors (phi = 1 below).
+        sqrt_total_var_j <- sqrt((s2_i * lambda_i)[n_idx])
+        Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE] / sqrt_total_var_j
+      } else if (do_check_outlier) {
         lambda_j <- lambda_i[n_idx]
         sqrt_total_var_j <- sqrt(lambda_j)
         Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE] / sqrt_total_var_j
@@ -458,76 +576,77 @@ estimate_bisam <- function(
         Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE]
       }
       
-      # # Model selection using mombf # change for Jakob
-      # w_i_mod <- mombf::modelSelection(
-      #   y = y_tmp_sd[n_idx],
-      #   x = Z_std_j,
-      #   groups = 1:length(p_idx),
-      #   nknots = 9,
-      #   center = FALSE,
-      #   scale = FALSE,
-      #   enumerate = FALSE,
-      #   includevars = rep(FALSE, length(p_idx)),
-      #   niter = nn,
-      #   thinning = 1,
-      #   burnin = nn - 1,
-      #   family = "normal",
-      #   priorCoef = sis_prior_f,
-      #   priorDelta = incl_prior_f,
-      #   phi = 1,
-      #   deltaini = w_i[p_idx_rand],
-      #   initSearch = 'none',
-      #   method = 'ALA',
-      #   hess = "asymp",
-      #   initpar = initpar,
-      #   adj.overdisp = 'intercept',
-      #   optimMethod = "auto",
-      #   optim_maxit = 10,
-      #   B = 10^5,
-      #   priorVar = var_prior_f,
-      #   priorSkew = momprior(tau = step_size_scale),
-      #   XtXprecomp = TRUE,
-      #   verbose = FALSE
-      # )
-      
-      # Model selection using BISAM # change for Jakob
-      w_i_mod <- BISAM::fast_model_selection(
+      # Model selection using mombf # change for Jakob
+      w_i_mod <- mombf::modelSelection(
         y = y_tmp_sd[n_idx],
         x = Z_std_j,
-        # groups = 1:length(p_idx),
-        # nknots = 9,
+        groups = 1:length(p_idx),
+        nknots = 9,
         center = FALSE,
         scale = FALSE,
-        # enumerate = FALSE,
-        # includevars = rep(FALSE, length(p_idx)),
+        enumerate = FALSE,
+        includevars = rep(FALSE, length(p_idx)),
         niter = nn,
         thinning = 1,
         burnin = nn - 1,
-        # family = "normal",
-        # priorCoef = sis_prior_f@priorPars["tau"],
-        tau = sis_prior_f@priorPars["tau"],
+        family = "normal",
+        priorCoef = sis_prior_f,
         priorDelta = incl_prior_f,
         phi = 1,
-        thinit = g_i[p_idx_rand],
-        initpar_type = 0,
         deltaini = w_i[p_idx_rand],
-        # initSearch = 'none',
-        method = 2, #'ALA', !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        hesstype = 1, #"asymp", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # initpar = initpar,
-        # adj.overdisp = 'intercept',
-        optimMethod = 0, #"auto", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        initSearch = 'none',
+        method = 'ALA',
+        hess = "asymp",
+        initpar = initpar,
+        adj.overdisp = 'intercept',
+        optimMethod = "auto",
         optim_maxit = 10,
         B = 10^5,
-        # priorVar = var_prior_f,
-        priorSkew = momprior(tau = step_size_scale)@priorPars["tau"],
-        computation_strategy = BISAM::STANDARD(),
-        XtXprecomp = TRUE#,
-        # verbose = FALSE
+        priorVar = var_prior_f,
+        priorSkew = momprior(tau = step_size_scale),
+        XtXprecomp = TRUE,
+        verbose = FALSE
       )
       
-      # w_i[p_idx_rand] <- as.logical(w_i_mod$postSample) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      w_i[p_idx_rand] <- as.logical(w_i_mod$post_sample) # change for Jakob
+      # # Model selection using BISAM # change for Jakob
+      # w_i_mod <- BISAM::fast_model_selection(
+      #   y = y_tmp_sd[n_idx],
+      #   x = Z_std_j,
+      #   # groups = 1:length(p_idx),
+      #   # nknots = 9,
+      #   center = FALSE,
+      #   scale = FALSE,
+      #   # enumerate = FALSE,
+      #   # includevars = rep(FALSE, length(p_idx)),
+      #   niter = nn,
+      #   thinning = 1,
+      #   burnin = nn - 1,
+      #   # family = "normal",
+      #   # priorCoef = sis_prior_f@priorPars["tau"],
+      #   tau = sis_prior_f@priorPars["tau"],
+      #   priorDelta = incl_prior_f,
+      #   phi = 1,
+      #   thinit = g_i[p_idx_rand],
+      #   initpar_type = 0,
+      #   deltaini = w_i[p_idx_rand],
+      #   # initSearch = 'none',
+      #   method = 0, #'ALA', !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      #   hesstype = 1, #"asymp", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      #   # initpar = initpar,
+      #   # adj.overdisp = 'intercept',
+      #   optimMethod = 2, #"auto", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      #   optim_maxit = 10,
+      #   B = 10^5,
+      #   knownphi = 1,
+      #   # priorVar = var_prior_f,
+      #   priorSkew = BISAM::momprior(tau = step_size_scale)$tau,
+      #   computation_strategy = BISAM::STANDARD(), # !!!!!!!!!!!!!!!!!!!!!!!!!!
+      #   XtXprecomp = TRUE#,
+      #   # verbose = FALSE
+      # )
+      
+      w_i[p_idx_rand] <- as.logical(w_i_mod$postSample) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      # w_i[p_idx_rand] <- as.logical(w_i_mod$post_sample) # change for Jakob
       pip_i[p_idx_rand] <- w_i_mod$margpp
       
       # ========================================================================
@@ -537,14 +656,23 @@ estimate_bisam <- function(
         g_draw <- matrix(0, nrow = ngdraw, ncol = t - 2)
         colsel <- which(w_i[p_idx_full] == TRUE)
         
-        # --- FIX: adjust for outlier variance inflation ---
-        if (do_check_outlier) {
+        # --- Adjust for time-varying / outlier variance inflation ---
+        if (do_sv) {
+          # GLS transform: divide through by the per-observation total sqrt-variance so
+          # the break magnitudes are drawn with known unit variance (phi_rnlp = 1).
+          sqrt_var_j <- sqrt((s2_i * lambda_i)[n_idx])
+          y_rnlp <- y_tmp[n_idx] / sqrt_var_j
+          z_rnlp <- z[, colsel, drop = FALSE] / sqrt_var_j
+          phi_rnlp <- 1
+        } else if (do_check_outlier) {
           sqrt_lambda_j <- sqrt(lambda_i[n_idx])
           y_rnlp <- y_tmp[n_idx] / sqrt_lambda_j
           z_rnlp <- z[, colsel, drop = FALSE] / sqrt_lambda_j
+          phi_rnlp <- s2_i_tmp[j]
         } else {
           y_rnlp <- y_tmp[n_idx]
           z_rnlp <- z[, colsel, drop = FALSE]
+          phi_rnlp <- s2_i_tmp[j]
         }
         
         g_draw[1, c(colsel, t - 2)] <- rnlp_new( # the t-2 is for the sigma^2 that is thrown away if sigma is known
@@ -557,7 +685,7 @@ estimate_bisam <- function(
           niter = ngburn + ngdraw,
           burnin = ngburn,
           knownphi = TRUE,
-          phi = s2_i_tmp[j],
+          phi = phi_rnlp,
           use_thinit = TRUE,
           thinit = g_incl_i[p_idx_full][colsel]
         )
@@ -578,7 +706,14 @@ estimate_bisam <- function(
       g_store[i, ] <- g_i
       w_store[i, ] <- w_i
       o_store[i, ] <- o_i
-      s2_store[i, ] <- s2_i_unique
+      if (do_sv) {
+        s2_store[i, ]        <- s2_i        # time-varying variance per observation
+        sv_mu_store[i, ]     <- sv_mu
+        sv_phi_store[i, ]    <- sv_phi
+        sv_sigma2_store[i, ] <- sv_sigma2
+      } else {
+        s2_store[i, ] <- s2_i_unique
+      }
       pip_store[i,] <- pip_i
     }
     
@@ -676,6 +811,23 @@ estimate_bisam <- function(
     )
   )
   
+  # --- Stochastic volatility output (AR(1) log-variance process per unit) ---
+  if (do_sv) {
+    out$draws$sv <- list(
+      "mu"     = sv_mu_store,
+      "phi"    = sv_phi_store,
+      "sigma2" = sv_sigma2_store
+    )
+    out$coefs$sv <- list(
+      "mu"     = colMeans(sv_mu_store),
+      "phi"    = colMeans(sv_phi_store),
+      "sigma2" = colMeans(sv_sigma2_store)
+    )
+    # Posterior-mean variance path, reshaped to time x unit for convenience
+    out$sv_variance_path <- matrix(s2_hat, nrow = t, ncol = n,
+                                   dimnames = list(t_ind, n_ind))
+  }
+  
   class(out) <- "ism"
   
   return(out)
@@ -769,4 +921,207 @@ log_dimom <- function(x, gamma0, k, nu, tau, sigma2) {
       exp(-2 * k * (lz - log_scale))
   }
   result
+}
+
+#===============================================================================
+#
+#     Helper Function for one Gibbs update of the Stochastic Volatility block
+#
+#===============================================================================
+# One full sweep of the stochastic-volatility Gibbs step, run in parallel for
+# every unit (column of the residual matrix). Each unit has its own AR(1)
+# log-variance process
+#
+#     r_{i,t} = exp(h_{i,t} / 2) * u_{i,t},   u_{i,t} ~ N(0, 1)
+#     h_{i,t} = mu_i + phi_i * (h_{i,t-1} - mu_i) + eta_{i,t},  eta ~ N(0, sigma2_i)
+#
+# Arguments
+#   res_mat : t x n matrix of residuals (time in rows, units in columns)
+#   h       : t x n matrix of current log-variance states
+#   mu, phi, sigma2 : length-n vectors of current hyperparameters
+#   priors  : list(mu_mean, mu_var, phi_a, phi_b, sig_shape, sig_rate)
+# Returns list(h, mu, phi, sigma2).
+update_sv <- function(res_mat, h, mu, phi, sigma2, priors) {
+  t <- nrow(res_mat)
+  n <- ncol(res_mat)
+  
+  # --- Kim, Shephard & Chib (1998) 7-component mixture for log(chi^2_1) ---
+  ksc_prob <- c(0.00730, 0.10556, 0.00002, 0.04395, 0.34001, 0.24566, 0.25750)
+  ksc_mean <- c(-11.40039, -5.24321, -9.83726, 1.50746, -0.65098, 0.52478, -2.35859)
+  ksc_var  <- c(5.79596, 2.61369, 5.17950, 0.16735, 0.64009, 0.34023, 1.26261)
+  
+  # Log squared residuals (offset avoids log(0) for near-zero residuals)
+  ystar <- log(res_mat^2 + 1e-7)
+  
+  # ---------------------------------------------------------------------------
+  # 1. Sample mixture component indicators s given the current states h
+  # ---------------------------------------------------------------------------
+  maxlog <- matrix(-Inf, t, n)
+  logw   <- vector("list", 7)
+  for (jc in 1:7) {
+    lw <- log(ksc_prob[jc]) - 0.5 * log(ksc_var[jc]) -
+      0.5 * (ystar - h - ksc_mean[jc])^2 / ksc_var[jc]
+    logw[[jc]] <- lw
+    maxlog <- pmax(maxlog, lw)
+  }
+  wsum  <- matrix(0, t, n)
+  wlist <- vector("list", 7)
+  for (jc in 1:7) {
+    wj <- exp(logw[[jc]] - maxlog)
+    wlist[[jc]] <- wj
+    wsum <- wsum + wj
+  }
+  u_draw <- matrix(runif(t * n), t, n) * wsum
+  csum   <- matrix(0, t, n)
+  chosen <- matrix(1L, t, n)
+  found  <- matrix(FALSE, t, n)
+  for (jc in 1:7) {
+    csum <- csum + wlist[[jc]]
+    pick <- (!found) & (u_draw <= csum)
+    chosen[pick] <- jc
+    found[pick]  <- TRUE
+  }
+  m_sel <- matrix(ksc_mean[chosen], t, n) # mixture means per observation
+  v_sel <- matrix(ksc_var[chosen],  t, n) # mixture variances per observation
+  
+  # ---------------------------------------------------------------------------
+  # 2. Sample the log-variance states h via FFBS (vectorized over units)
+  #    Observation:  (ystar - m_sel) = h + N(0, v_sel)
+  #    State:        h_t = mu + phi (h_{t-1} - mu) + N(0, sigma2)
+  # ---------------------------------------------------------------------------
+  yy <- ystar - m_sel
+  
+  filt_mean <- matrix(0, t, n)
+  filt_var  <- matrix(0, t, n)
+  pred_mean <- matrix(0, t, n)
+  pred_var  <- matrix(0, t, n)
+  
+  a <- mu                     # predicted state mean at t = 1 (stationary mean)
+  P <- sigma2 / (1 - phi^2)   # predicted state variance at t = 1 (stationary var)
+  for (tt in 1:t) {
+    pred_mean[tt, ] <- a
+    pred_var[tt, ]  <- P
+    Fv <- P + v_sel[tt, ]
+    K  <- P / Fv
+    filt_mean[tt, ] <- a + K * (yy[tt, ] - a)
+    filt_var[tt, ]  <- P * (1 - K)
+    # one-step-ahead prediction for the next time point
+    a <- mu + phi * (filt_mean[tt, ] - mu)
+    P <- phi^2 * filt_var[tt, ] + sigma2
+  }
+  
+  h_new <- matrix(0, t, n)
+  h_new[t, ] <- filt_mean[t, ] + sqrt(filt_var[t, ]) * rnorm(n)
+  if (t >= 2) {
+    for (tt in (t - 1):1) {
+      J      <- filt_var[tt, ] * phi / pred_var[tt + 1, ]
+      m_star <- filt_mean[tt, ] + J * (h_new[tt + 1, ] - pred_mean[tt + 1, ])
+      P_star <- filt_var[tt, ] * (1 - J * phi)
+      h_new[tt, ] <- m_star + sqrt(pmax(P_star, 0)) * rnorm(n)
+    }
+  }
+  h <- h_new
+  
+  # ---------------------------------------------------------------------------
+  # 3. Sample the AR(1) hyperparameters (per unit, vectorized over units)
+  # ---------------------------------------------------------------------------
+  h1   <- h[1, ]
+  hlag <- h[-t, , drop = FALSE]  # h_{t-1}, t = 2..T
+  hcur <- h[-1, , drop = FALSE]  # h_t,     t = 2..T
+  
+  # --- sigma2 (vol-of-vol): inverse-gamma full conditional ---
+  hcen_lag <- sweep(hlag, 2, mu)
+  hcen_cur <- sweep(hcur, 2, mu)
+  eta      <- hcen_cur - sweep(hcen_lag, 2, phi, `*`)
+  SSE      <- (1 - phi^2) * (h1 - mu)^2 + colSums(eta^2)
+  sigma2   <- 1 / rgamma(n,
+                         shape = priors$sig_shape + t / 2,
+                         rate  = priors$sig_rate + 0.5 * SSE)
+  
+  # --- mu (level): Gaussian full conditional ---
+  sum_term <- colSums(hcur - sweep(hlag, 2, phi, `*`)) # sum_{t=2}^T (h_t - phi h_{t-1})
+  prec <- 1 / priors$mu_var +
+    (1 - phi^2) / sigma2 +
+    (t - 1) * (1 - phi)^2 / sigma2
+  numr <- priors$mu_mean / priors$mu_var +
+    (1 - phi^2) / sigma2 * h1 +
+    (1 - phi) / sigma2 * sum_term
+  mu <- numr / prec + sqrt(1 / prec) * rnorm(n)
+  
+  # --- phi (persistence): Metropolis-within-Gibbs, Beta prior on (phi + 1)/2 ---
+  hcen_lag <- sweep(hlag, 2, mu)
+  hcen_cur <- sweep(hcur, 2, mu)
+  Sxx <- colSums(hcen_lag^2)
+  Sxy <- colSums(hcen_lag * hcen_cur)
+  Sxx[Sxx <= 0] <- 1e-8
+  mean_prop <- Sxy / Sxx
+  sd_prop   <- sqrt(sigma2 / Sxx)
+  phi_prop  <- rnorm(n, mean_prop, sd_prop)
+  
+  h1 <- h[1, ]
+  log_target <- function(ph) {
+    # stationary-initial-state term + Beta((phi+1)/2) prior; the AR(2..T)
+    # likelihood cancels against the Gaussian proposal in the acceptance ratio.
+    stat  <- 0.5 * log(1 - ph^2) - 0.5 * (1 - ph^2) * (h1 - mu)^2 / sigma2
+    prior <- (priors$phi_a - 1) * log((1 + ph) / 2) +
+      (priors$phi_b - 1) * log((1 - ph) / 2)
+    stat + prior
+  }
+  valid   <- phi_prop > -1 & phi_prop < 1
+  phi_eval <- ifelse(valid, phi_prop, 0)          # dummy for invalid draws (masked out below)
+  log_acc <- log_target(phi_eval) - log_target(phi)
+  log_acc[!valid] <- -Inf
+  accept  <- valid & (log(runif(n)) < log_acc)
+  phi[accept] <- phi_prop[accept]
+  
+  list(h = h, mu = mu, phi = phi, sigma2 = sigma2)
+}
+
+#===============================================================================
+#
+#     Helper Function: one SV Gibbs sweep via the stochvol package backend
+#
+#===============================================================================
+# Note on parameterisation: stochvol works with sigma (the SD of the log-variance
+# innovations); this wrapper takes/returns sigma2 (the variance) to stay
+# interchangeable with update_sv(). It also threads the extra latent state
+# stochvol needs across sweeps: h0 (initial log-variance) and r (mixture-component
+# indicators)
+#
+# Arguments
+#   res_mat    : t x n matrix of residuals (time in rows, units in columns)
+#   h          : t x n matrix of current log-variance states
+#   h0         : length-n vector of current initial states h_0
+#   r          : t x n integer matrix of current mixture indicators
+#   mu, phi, sigma2 : length-n vectors of current hyperparameters (sigma2 = variance)
+#   prior_spec : stochvol prior object from specify_priors()
+#   expert     : stochvol expert settings from get_default_fast_sv()
+# Returns list(h, h0, r, mu, phi, sigma2).
+update_sv_stochvol <- function(res_mat, h, h0, r, mu, phi, sigma2, prior_spec, expert) {
+  t <- nrow(res_mat)
+  n <- ncol(res_mat)
+  offset <- 1e-7  # guards log(0) for near-zero residuals (matches update_sv)
+  
+  for (i in 1:n) {
+    log_data2 <- log(res_mat[, i]^2 + offset)
+    upd <- stochvol::update_fast_sv(
+      log_data2  = log_data2,
+      mu         = mu[i],
+      phi        = phi[i],
+      sigma      = sqrt(sigma2[i]),
+      h0         = h0[i],
+      h          = h[, i],
+      r          = r[, i],
+      prior_spec = prior_spec,
+      expert     = expert
+    )
+    h[, i]    <- upd$h
+    h0[i]     <- upd$h0
+    r[, i]    <- upd$r
+    mu[i]     <- upd$mu
+    phi[i]    <- upd$phi
+    sigma2[i] <- upd$sigma^2
+  }
+  
+  list(h = h, h0 = h0, r = r, mu = mu, phi = phi, sigma2 = sigma2)
 }
