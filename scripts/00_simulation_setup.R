@@ -150,8 +150,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 2000L
-NBURN <- 500L
+NDRAW <- 1000L
+NBURN <- 200L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 10
@@ -274,8 +274,8 @@ COL_FIT  <- "#1B9E77"
 COL_IIS  <- "#762A83"
 COL_GRID <- "gray70"
 
-pdf(sprintf("./output/simulation/appendix_fig_%s.pdf", setup_type),
-    width = 16, height = 9)
+# pdf(sprintf("./output/simulation/appendix_fig_%s.pdf", setup_type),
+#     width = 16, height = 9)
 
 par(
   mfrow = c(2, 1),
