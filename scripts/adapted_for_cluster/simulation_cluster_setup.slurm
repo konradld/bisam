@@ -16,8 +16,9 @@ echo "Allocated hosts: $SLURM_JOB_NODELIST"
 
 # Set up R environmentexport R_LIBS=~/R_LIBS
 . /opt/apps/2023-04-11_lmod.bash
-module load r-4.5.1-gcc-12.2.0-tfchyxd
+module purge
+module restore r_env_23022024
 
 # Run the R script with array task ID and count
-srun Rscript 01_estimation_bisam_convergence_no-FEs_fixed-breaks_NT.R $SLURM_ARRAY_TASK_ID
+srun Rscript ~/bisam/scripts/adapted_for_cluster/01_estimation_bisam_convergence_no-FEs_fixed-breaks_NT.R $SLURM_ARRAY_TASK_ID
 
