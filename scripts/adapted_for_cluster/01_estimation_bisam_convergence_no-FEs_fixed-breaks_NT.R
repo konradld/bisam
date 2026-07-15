@@ -30,8 +30,8 @@ config <- expand.grid(
   Ni = c(10),
   
   number_reps = 1:100,
-  setup = c("sparse", "dense"),
-  date = "2026-07-07_no-FEs_fixed-breaks_NT",
+  setup = c("sparse"),
+  date = "2026-07-15_no-FEs_fixed-breaks_NT",
   stringsAsFactors = FALSE
 )
 conf <- config[run_numeric,]
@@ -134,8 +134,8 @@ DO_CENTER_X <- FALSE
 DO_SCALE_X <- FALSE
 
 # MCMC settings
-NDRAW <- 500L
-NBURN <- 100L
+NDRAW <- 5000L
+NBURN <- 1000L
 
 # Prior settings
 BETA_VARIANCE_SCALE <- 100
