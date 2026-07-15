@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gets_bbd_SD
+#SBATCH --job-name=bisam_convergence
 #SBATCH --mem=8G 
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -9,7 +9,7 @@
 #SBATCH -e logs/%x_%A_%a.err
 #SBATCH --mail-user=lucas.konrad@wu.ac.at
 #SBATCH --mail-type=ALL
-#SBATCH --array=1-5600%400	         # index values
+#SBATCH --array=1-1700%400	         # index values
 
 echo "Running job $SLURM_JOB_NAME with ID $SLURM_JOB_ID, array task ID $SLURM_ARRAY_TASK_ID"
 echo "Allocated hosts: $SLURM_JOB_NODELIST"
@@ -19,5 +19,5 @@ echo "Allocated hosts: $SLURM_JOB_NODELIST"
 module load r-4.5.1-gcc-12.2.0-tfchyxd
 
 # Run the R script with array task ID and count
-srun Rscript 11_simulation_estimation.R $SLURM_ARRAY_TASK_ID
+srun Rscript 01_estimation_bisam_convergence_no-FEs_fixed-breaks_NT.R $SLURM_ARRAY_TASK_ID
 
