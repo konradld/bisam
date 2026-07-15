@@ -7,7 +7,7 @@
 #SBATCH --partition=short
 #SBATCH -o logs/%x_%A_%a.out
 #SBATCH -e logs/%x_%A_%a.err
-#SBATCH --mail-user=lukas.vashold@wu.ac.at
+#SBATCH --mail-user=lucas.konrad@wu.ac.at
 #SBATCH --mail-type=ALL
 #SBATCH --array=1-5600%400	         # index values
 
