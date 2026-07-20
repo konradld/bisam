@@ -1104,23 +1104,50 @@ update_sv_stochvol <- function(res_mat, h, h0, r, mu, phi, sigma2, prior_spec, e
   
   for (i in 1:n) {
     log_data2 <- log(res_mat[, i]^2 + offset)
-    upd <- stochvol::update_fast_sv(
-      log_data2  = log_data2,
-      mu         = mu[i],
-      phi        = phi[i],
-      sigma      = sqrt(sigma2[i]),
-      h0         = h0[i],
-      h          = h[, i],
-      r          = r[, i],
-      prior_spec = prior_spec,
-      expert     = expert
+    
+    para <- list(mu = mu[i], 
+                 phi = phi[i], 
+                 sigma = sqrt(sigma2[i]), 
+                 nu = Inf, # ?
+                 rho = 0, # ?
+                 beta = NA, # ?
+                 latent0 = h0[i]) 
+    
+    latent <- h[, i]
+    
+    upd <- stochvol::svsample_fast_cpp(
+      y = log_data2, 
+      startpara = para, 
+      startlatent = latent, 
+      priorspec = prior_spec,
+      fast_sv = expert
     )
-    h[, i]    <- upd$h
-    h0[i]     <- upd$h0
-    r[, i]    <- upd$r
-    mu[i]     <- upd$mu
-    phi[i]    <- upd$phi
-    sigma2[i] <- upd$sigma^2
+    
+    h[, i]    <- upd$latent
+    h0[i]     <- upd$latent0
+    r[, i]    <- r[, i] # makes sense?
+    mu[i]     <- upd$para[, "mu"]
+    phi[i]    <- upd$para[, "phi"]
+    sigma2[i] <- upd$para[, "sigma"]^2
+    
+    # upd <- stochvol::update_fast_sv(
+    #   log_data2  = log_data2,
+    #   mu         = mu[i],
+    #   phi        = phi[i],
+    #   sigma      = sqrt(sigma2[i]),
+    #   h0         = h0[i],
+    #   h          = h[, i],
+    #   r          = r[, i],
+    #   prior_spec = prior_spec,
+    #   expert     = expert
+    # )
+    # 
+    # h[, i]    <- upd$h
+    # h0[i]     <- upd$h0
+    # r[, i]    <- upd$r
+    # mu[i]     <- upd$mu
+    # phi[i]    <- upd$phi
+    # sigma2[i] <- upd$sigma^2
   }
   
   list(h = h, h0 = h0, r = r, mu = mu, phi = phi, sigma2 = sigma2)
