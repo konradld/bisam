@@ -292,11 +292,32 @@ estimate_bisam <- function(
     s2_i      <- as.vector(exp(sv_h))                   # per-observation variance, unit-major order
     sqrt_s2_i <- sqrt(s2_i)
     if (is.null(sv_prior_mu_mean)) sv_prior_mu_mean <- mean(sv_mu)
-    sv_priors <- list(
-      mu_mean   = sv_prior_mu_mean, mu_var  = sv_prior_mu_var,
-      phi_a     = sv_prior_phi_a,   phi_b   = sv_prior_phi_b,
-      sig_shape = sv_prior_sigma_shape, sig_rate = sv_prior_sigma_rate
-    )
+    
+    if(is.null(sv_prior_mu_mean) & is.null(sv_prior_mu_var) & 
+       is.null(sv_prior_phi_a) & is.null(sv_prior_phi_b) & 
+       is.null(sv_prior_sigma_shape) & is.null(sv_prior_sigma_rate)) {
+      # Use empirical estimates for prior hyperparameters
+      sv_empirical_priors <- get_sv_prior_from_data(data,
+                                                    y_index = 3,
+                                                    i_index = 1,
+                                                    t_index = 2)
+      sv_priors <- list(
+        mu_mean   = sv_empirical_priors$sv_prior_mu_mean, 
+        mu_var  = sv_empirical_priors$sv_prior_mu_var,
+        phi_a     = sv_empirical_priors$sv_prior_phi_a,   
+        phi_b   = sv_empirical_priors$sv_prior_phi_b,
+        sig_shape = sv_empirical_priors$sv_prior_sigma_shape,
+        sig_rate = sv_empirical_priors$sv_prior_sigma_rate
+      )
+    } else {
+      sv_priors <- list(
+        mu_mean   = sv_prior_mu_mean, mu_var  = sv_prior_mu_var,
+        phi_a     = sv_prior_phi_a,   phi_b   = sv_prior_phi_b,
+        sig_shape = sv_prior_sigma_shape, sig_rate = sv_prior_sigma_rate
+      )
+    }
+    
+
     
     # --- stochvol backend: prior spec, expert settings and extra latent state ---
     if (sv_backend == "stochvol") {
@@ -1103,29 +1124,64 @@ update_sv_stochvol <- function(res_mat, h, h0, r, mu, phi, sigma2, prior_spec, e
   offset <- 1e-7  # guards log(0) for near-zero residuals (matches update_sv)
   
   for (i in 1:n) {
-    log_data2 <- log(res_mat[, i]^2 + offset)
+    # log_data2 <- res_mat[, i]^2 + offset)
+    y_raw <- res_mat[, i]
+    y_raw[abs(y_raw) < offset] <- offset * sign(y_raw[abs(y_raw) < offset] + offset)
     
     para <- list(mu = mu[i], 
                  phi = phi[i], 
                  sigma = sqrt(sigma2[i]), 
-                 nu = Inf, # ?
-                 rho = 0, # ?
-                 beta = NA, # ?
+                 # nu = Inf, # only necessary for t-model
+                 # rho = 0, # only necessary for leverage model
+                 beta = NA,
                  latent0 = h0[i]) 
     
     latent <- h[, i]
     
-    upd <- stochvol::svsample_fast_cpp(
-      y = log_data2, 
-      startpara = para, 
-      startlatent = latent, 
-      priorspec = prior_spec,
-      fast_sv = expert
-    )
+    # upd <- stochvol::svsample_fast_cpp(
+    #   y = y_raw, 
+    #   startpara = para, 
+    #   startlatent = latent, 
+    #   priorspec = prior_spec,
+    #   fast_sv = expert
+    # )
     
+    upd <- tryCatch({
+      stochvol::svsample_fast_cpp(
+        y = y_raw,
+        startpara = para,
+        startlatent = h[, i],
+        priorspec = prior_spec,
+        fast_sv = expert
+      )
+    }, error = function(e) {
+      # Fallback: use svsample with 1 draw
+      warning(sprintf("svsample_fast_cpp failed for unit %d: %s. Using svsample fallback.", i, e$message))
+      sv_fit <- stochvol::svsample(
+        y_raw,
+        draws = 1,
+        burnin = 0,
+        startpara = list(mu = mu[i], phi = phi[i], sigma = sqrt(sigma2[i])),
+        startlatent = h[, i],
+        priormu = c(prior_spec$mu$mean, prior_spec$mu$sd),
+        priorphi = c(prior_spec$phi$shape1, prior_spec$phi$shape2),
+        priorsigma = prior_spec$sigma2$rate,
+        quiet = TRUE
+      )
+      list(
+        latent = as.numeric(sv_fit$latent),
+        latent0 = as.numeric(sv_fit$latent0),
+        para = matrix(c(
+          as.numeric(sv_fit$para[, "mu"]),
+          as.numeric(sv_fit$para[, "phi"]),
+          as.numeric(sv_fit$para[, "sigma"])
+        ), nrow = 1, dimnames = list(NULL, c("mu", "phi", "sigma")))
+      )
+    })
+
     h[, i]    <- upd$latent
     h0[i]     <- upd$latent0
-    r[, i]    <- r[, i] # makes sense?
+    # r[, i]    <- r[, i] # makes sense?
     mu[i]     <- upd$para[, "mu"]
     phi[i]    <- upd$para[, "phi"]
     sigma2[i] <- upd$para[, "sigma"]^2
@@ -1151,4 +1207,52 @@ update_sv_stochvol <- function(res_mat, h, h0, r, mu, phi, sigma2, prior_spec, e
   }
   
   list(h = h, h0 = h0, r = r, mu = mu, phi = phi, sigma2 = sigma2)
+}
+
+
+# First, get rough estimates from the data
+get_sv_prior_from_data <- function(data, y_index = 3, i_index = 1, t_index = 2) {
+  
+  y <- data[, y_index]
+  i <- data[, i_index]
+  
+  # Compute rolling volatility estimates per unit
+  log_vol_estimates <- tapply(y, i, function(y_i) {
+    # Simple rolling variance estimate
+    if (length(y_i) < 10) return(NA)
+    roll_var <- zoo::rollapply(y_i, width = 10, FUN = var, fill = NA, align = "right")
+    log(roll_var[!is.na(roll_var) & roll_var > 0])
+  })
+  
+  log_vol <- unlist(log_vol_estimates)
+  log_vol <- log_vol[is.finite(log_vol)]
+  
+  # Estimate mu prior from data
+  mu_mean <- mean(log_vol)
+  mu_var <- var(log_vol) / 2  # Shrink variance for informativeness
+  
+  # Estimate phi from autocorrelation of log-volatility
+  phi_estimates <- tapply(y, i, function(y_i) {
+    if (length(y_i) < 20) return(NA)
+    log_y2 <- log(y_i^2 + 1e-8)
+    acf_val <- acf(log_y2, lag.max = 1, plot = FALSE)$acf[2]
+    max(min(acf_val, 0.99), 0.5)  # Bound between 0.5 and 0.99
+  })
+  phi_mean <- mean(phi_estimates, na.rm = TRUE)
+  
+  # Convert phi_mean to Beta parameters (method of moments)
+  # (phi + 1)/2 ~ Beta(a, b) with mean = a/(a+b)
+  target_mean <- (phi_mean + 1) / 2
+  concentration <- 50  # Higher = more informative
+  phi_a <- target_mean * concentration
+  phi_b <- (1 - target_mean) * concentration
+  
+  list(
+    sv_prior_mu_mean = mu_mean,
+    sv_prior_mu_var = max(mu_var, 0.5),  # Floor at 0.5
+    sv_prior_phi_a = phi_a,
+    sv_prior_phi_b = phi_b,
+    sv_prior_sigma_shape = 5,
+    sv_prior_sigma_rate = 0.1
+  )
 }
