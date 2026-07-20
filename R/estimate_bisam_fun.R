@@ -291,49 +291,46 @@ estimate_bisam <- function(
     sv_h      <- matrix(sv_mu, nrow = t, ncol = n, byrow = TRUE) # latent log-variance paths (t x n)
     s2_i      <- as.vector(exp(sv_h))                   # per-observation variance, unit-major order
     sqrt_s2_i <- sqrt(s2_i)
-    if (is.null(sv_prior_mu_mean)) sv_prior_mu_mean <- mean(sv_mu)
-    
-    if(is.null(sv_prior_mu_mean) & is.null(sv_prior_mu_var) & 
-       is.null(sv_prior_phi_a) & is.null(sv_prior_phi_b) & 
-       is.null(sv_prior_sigma_shape) & is.null(sv_prior_sigma_rate)) {
-      # Use empirical estimates for prior hyperparameters
-      sv_empirical_priors <- get_sv_prior_from_data(data,
-                                                    y_index = 3,
-                                                    i_index = 1,
-                                                    t_index = 2)
-      sv_priors <- list(
-        mu_mean   = sv_empirical_priors$sv_prior_mu_mean, 
-        mu_var  = sv_empirical_priors$sv_prior_mu_var,
-        phi_a     = sv_empirical_priors$sv_prior_phi_a,   
-        phi_b   = sv_empirical_priors$sv_prior_phi_b,
-        sig_shape = sv_empirical_priors$sv_prior_sigma_shape,
-        sig_rate = sv_empirical_priors$sv_prior_sigma_rate
-      )
+    if (is.null(sv_prior_mu_mean)){
+      sv_prior_mu_mean <- sv_mu
     } else {
-      sv_priors <- list(
-        mu_mean   = sv_prior_mu_mean, mu_var  = sv_prior_mu_var,
-        phi_a     = sv_prior_phi_a,   phi_b   = sv_prior_phi_b,
-        sig_shape = sv_prior_sigma_shape, sig_rate = sv_prior_sigma_rate
-      )
-    }
+      sv_prior_mu_mean <- rep(sv_prior_mu_mean, n)
+    } 
     
+    sv_priors <- list(
+      mu_mean   = sv_prior_mu_mean, mu_var  = sv_prior_mu_var,
+      phi_a     = sv_prior_phi_a,   phi_b   = sv_prior_phi_b,
+      sig_shape = sv_prior_sigma_shape, sig_rate = sv_prior_sigma_rate
+    )
 
-    
     # --- stochvol backend: prior spec, expert settings and extra latent state ---
     if (sv_backend == "stochvol") {
       # stochvol's fast_sv sampler places a Gamma prior on sigma^2_eta (vol-of-vol).
       # Match its prior mean to the internal InvGamma(shape, rate) mean = rate/(shape-1)
       # so the two backends are comparable; keep stochvol's default Gamma shape of 0.5.
-      Bsigma <- if (sv_prior_sigma_shape > 1) {
-        sv_prior_sigma_rate / (sv_prior_sigma_shape - 1)
-      } else {
-        sv_prior_sigma_rate
+      # Bsigma <- if (sv_prior_sigma_shape > 1) {
+      #   sv_prior_sigma_rate / (sv_prior_sigma_shape - 1)
+      # } else {
+      #   sv_prior_sigma_rate
+      # }
+      
+      sv_prior_spec <- list()
+      for(ii in 1:n) {
+        if(sv_prior_phi_a == 0 | sv_prior_phi_b == 0 | sv_prior_sigma_shape == 0 | sv_prior_sigma_rate == 0) {
+          sv_prior_spec[[ii]] <- stochvol::specify_priors(
+            mu     = stochvol::sv_constant(sv_prior_mu_mean[ii]),
+            phi    = stochvol::sv_constant(0),
+            sigma2 = stochvol::sv_constant(0.00001)
+          )
+        } else {
+          sv_prior_spec[[ii]] <- stochvol::specify_priors(
+            mu     = stochvol::sv_normal(mean = sv_prior_mu_mean[ii], sd = sqrt(sv_prior_mu_var)),
+            phi    = stochvol::sv_beta(shape1 = sv_prior_phi_a, shape2 = sv_prior_phi_b),
+            sigma2 = stochvol::sv_gamma(shape = sv_prior_sigma_shape, rate = sv_prior_sigma_rate) # changed that here: shape = 0.5, rate = 0.5 / Bsigma
+          )
+        }
       }
-      sv_prior_spec <- stochvol::specify_priors(
-        mu     = stochvol::sv_normal(mean = sv_prior_mu_mean, sd = sqrt(sv_prior_mu_var)),
-        phi    = stochvol::sv_beta(shape1 = sv_prior_phi_a, shape2 = sv_prior_phi_b),
-        sigma2 = stochvol::sv_gamma(shape = 0.5, rate = 0.5 / Bsigma)
-      )
+      
       sv_expert <- stochvol::get_default_fast_sv()
       sv_h0 <- sv_mu                            # per-unit initial log-variance state h_0
       sv_r  <- matrix(5L, nrow = t, ncol = n)   # mixture-component indicators (resampled every sweep)
@@ -1131,27 +1128,19 @@ update_sv_stochvol <- function(res_mat, h, h0, r, mu, phi, sigma2, prior_spec, e
     para <- list(mu = mu[i], 
                  phi = phi[i], 
                  sigma = sqrt(sigma2[i]), 
-                 # nu = Inf, # only necessary for t-model
-                 # rho = 0, # only necessary for leverage model
+                 nu = Inf, # only necessary for t-model
+                 rho = 0, # only necessary for leverage model
                  beta = NA,
                  latent0 = h0[i]) 
     
     latent <- h[, i]
-    
-    # upd <- stochvol::svsample_fast_cpp(
-    #   y = y_raw, 
-    #   startpara = para, 
-    #   startlatent = latent, 
-    #   priorspec = prior_spec,
-    #   fast_sv = expert
-    # )
-    
+
     upd <- tryCatch({
       stochvol::svsample_fast_cpp(
         y = y_raw,
         startpara = para,
-        startlatent = h[, i],
-        priorspec = prior_spec,
+        startlatent = latent,
+        priorspec = prior_spec[[i]],
         fast_sv = expert
       )
     }, error = function(e) {
@@ -1162,15 +1151,13 @@ update_sv_stochvol <- function(res_mat, h, h0, r, mu, phi, sigma2, prior_spec, e
         draws = 1,
         burnin = 0,
         startpara = list(mu = mu[i], phi = phi[i], sigma = sqrt(sigma2[i])),
-        startlatent = h[, i],
-        priormu = c(prior_spec$mu$mean, prior_spec$mu$sd),
-        priorphi = c(prior_spec$phi$shape1, prior_spec$phi$shape2),
-        priorsigma = prior_spec$sigma2$rate,
+        startlatent = latent,
+        priorspec = prior_spec[[i]],
         quiet = TRUE
       )
       list(
-        latent = as.numeric(sv_fit$latent),
-        latent0 = as.numeric(sv_fit$latent0),
+        latent = as.numeric(sv_fit$latent[[1]]),
+        latent0 = as.numeric(sv_fit$latent0[[1]]),
         para = matrix(c(
           as.numeric(sv_fit$para[, "mu"]),
           as.numeric(sv_fit$para[, "phi"]),
@@ -1181,78 +1168,11 @@ update_sv_stochvol <- function(res_mat, h, h0, r, mu, phi, sigma2, prior_spec, e
 
     h[, i]    <- upd$latent
     h0[i]     <- upd$latent0
-    # r[, i]    <- r[, i] # makes sense?
+    # r[, i]    <- r[, i] # handled internally by stochvol
     mu[i]     <- upd$para[, "mu"]
     phi[i]    <- upd$para[, "phi"]
     sigma2[i] <- upd$para[, "sigma"]^2
-    
-    # upd <- stochvol::update_fast_sv(
-    #   log_data2  = log_data2,
-    #   mu         = mu[i],
-    #   phi        = phi[i],
-    #   sigma      = sqrt(sigma2[i]),
-    #   h0         = h0[i],
-    #   h          = h[, i],
-    #   r          = r[, i],
-    #   prior_spec = prior_spec,
-    #   expert     = expert
-    # )
-    # 
-    # h[, i]    <- upd$h
-    # h0[i]     <- upd$h0
-    # r[, i]    <- upd$r
-    # mu[i]     <- upd$mu
-    # phi[i]    <- upd$phi
-    # sigma2[i] <- upd$sigma^2
   }
   
   list(h = h, h0 = h0, r = r, mu = mu, phi = phi, sigma2 = sigma2)
-}
-
-
-# First, get rough estimates from the data
-get_sv_prior_from_data <- function(data, y_index = 3, i_index = 1, t_index = 2) {
-  
-  y <- data[, y_index]
-  i <- data[, i_index]
-  
-  # Compute rolling volatility estimates per unit
-  log_vol_estimates <- tapply(y, i, function(y_i) {
-    # Simple rolling variance estimate
-    if (length(y_i) < 10) return(NA)
-    roll_var <- zoo::rollapply(y_i, width = 10, FUN = var, fill = NA, align = "right")
-    log(roll_var[!is.na(roll_var) & roll_var > 0])
-  })
-  
-  log_vol <- unlist(log_vol_estimates)
-  log_vol <- log_vol[is.finite(log_vol)]
-  
-  # Estimate mu prior from data
-  mu_mean <- mean(log_vol)
-  mu_var <- var(log_vol) / 2  # Shrink variance for informativeness
-  
-  # Estimate phi from autocorrelation of log-volatility
-  phi_estimates <- tapply(y, i, function(y_i) {
-    if (length(y_i) < 20) return(NA)
-    log_y2 <- log(y_i^2 + 1e-8)
-    acf_val <- acf(log_y2, lag.max = 1, plot = FALSE)$acf[2]
-    max(min(acf_val, 0.99), 0.5)  # Bound between 0.5 and 0.99
-  })
-  phi_mean <- mean(phi_estimates, na.rm = TRUE)
-  
-  # Convert phi_mean to Beta parameters (method of moments)
-  # (phi + 1)/2 ~ Beta(a, b) with mean = a/(a+b)
-  target_mean <- (phi_mean + 1) / 2
-  concentration <- 50  # Higher = more informative
-  phi_a <- target_mean * concentration
-  phi_b <- (1 - target_mean) * concentration
-  
-  list(
-    sv_prior_mu_mean = mu_mean,
-    sv_prior_mu_var = max(mu_var, 0.5),  # Floor at 0.5
-    sv_prior_phi_a = phi_a,
-    sv_prior_phi_b = phi_b,
-    sv_prior_sigma_shape = 5,
-    sv_prior_sigma_rate = 0.1
-  )
 }
