@@ -172,6 +172,20 @@ estimate_bisam <- function(
     if (do_geweke_test) {
       stop("do_geweke_test is only implemented for the constant-variance sampler, not for do_sv.")
     }
+    if (t < 20) {
+      stop("Stochastic volatility cannot be reliably estimated with T = ", t, 
+           " time periods (minimum ~30, recommended 100+). ",
+           "Use do_sv = FALSE or acquire more data.")
+    }
+    if (t < 30) {
+      warning("T = ", t, " is below the recommended minimum for SV estimation. ",
+              "Results will be heavily prior-dependent. ",
+              "Consider using very informative priors and report sensitivity analysis.")
+    }
+    if (t < 50) {
+      message("Note: SV estimation with T = ", t, " will have wide credible intervals. ",
+              "Consider T >= 100 for reliable inference.")
+    }
   }
   
   # --- Sigma^2 Prior ---
@@ -190,7 +204,7 @@ estimate_bisam <- function(
         n_idx <- N_idx[i,]
         res2 <- mod_prior$residuals[n_idx]^2
         Qtop <- quantile(res2, 0.90)
-        s2_OLS <- sum(res2[res2 < Qtop]) / (sum(res2 < Qtop) - p / n * 0.9) # p / n is the realtive share of coefs per unit
+        s2_OLS <- sum(res2[res2 < Qtop]) / (sum(res2 < Qtop) - p / n * 0.9) # p / n is the relative share of coefs per unit
         s2_pars <- inv_gamma_params(shape = 3, s2_OLS, p = sigma2_hyper_p)
         sigma2_shape[i] <- s2_pars$shape
         sigma2_rate[i] <- s2_pars$rate
@@ -320,7 +334,7 @@ estimate_bisam <- function(
           sv_prior_spec[[ii]] <- stochvol::specify_priors(
             mu     = stochvol::sv_constant(sv_prior_mu_mean[ii]),
             phi    = stochvol::sv_constant(0),
-            sigma2 = stochvol::sv_constant(0.00001)
+            sigma2 = stochvol::sv_constant(0.0001)
           )
         } else {
           sv_prior_spec[[ii]] <- stochvol::specify_priors(
