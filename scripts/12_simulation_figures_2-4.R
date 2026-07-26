@@ -16,8 +16,8 @@ rm(list = ls())
 #                         USER CONFIGURATION
 # ==============================================================================
 
-FIGURE <- 3          # 2 (sparse SD), 3 (dense SD), or 4 (BN)
-DATE   <- "2026-01-23"
+FIGURE <- 2          # 2 (sparse SD), 3 (dense SD), or 4 (BN)
+DATE   <- "2026-07-24"
 GETS_LVL <- 0.01
 
 # Figure 4 only: which break size (in SD) to condition on
