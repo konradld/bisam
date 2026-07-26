@@ -26,19 +26,21 @@ library(gets)
 library(getspanel)
 library(Matrix)
 library(mombf)
+library(stochvol)
 
 config <- list(
   ssvs_settings = expand.grid(
     sis_prior = c("imom"),
-    tau = sapply(c(0.01, 0.05), priorp2g, q = 1, prior = c("iMom")), 
+    tau = sapply(c(0.05), priorp2g, q = 1, prior = c("iMom")), 
     check_outl = c(TRUE, FALSE),
-    out_scale = c(5, 10, 15, 25, 50, 10^2, 250, 500, 10^3),
+    out_scale = c(5, 10, 25, 50),
     beta_prior = c("f"),
-    incl_prior = c("bern"),
+    beta_scale = c(10, 100),
+    incl_prior = c("bern", "beta_bern"),
     stringsAsFactors = FALSE
   ),
-  gets_lvl = c(0.05, 0.01), # just use the setting as done by Koch et al (2022)
-  date = "2026-03-06_dimom"
+  gets_lvl = c(0.05),
+  date = "2026-07-21"
 )
 
 if(is_slurm) {
@@ -50,7 +52,7 @@ if(is_slurm) {
   dir_res <- sprintf("./output/emissions/%s/", 
                      config$date)
   dir_data <- "./data/CO2DriversEU_dataset_CLEAN.csv"
-  source("./functions/estimate_bisam_fun.R")
+  source("./R/estimate_bisam_fun.R")
 }
 
 dir.create(dir_res, 
@@ -81,6 +83,16 @@ if(run_numeric <= nrow(config$ssvs_settings)) {
   # BISAM -------------------------------------------------------------------
   conf <- config$ssvs_settings[run_numeric, ]
   
+  
+  # Prior specifications
+  STEP_INCL_PRIOR <- conf$incl_prior
+  STEP_SIZE_PRIOR <- conf$sis_prior
+  TAU <- conf$tau
+  BETA_PRIOR <- conf$beta_prior
+  BETA_VARIANCE_SCALE <- conf$beta_scale
+  DO_INDICATOR_SATURATION <- conf$check_outl
+  OUTLIER_SCALE <- conf$out_scale
+  
   # Data processing
   I_INDEX <- 1
   T_INDEX <- 2
@@ -94,12 +106,10 @@ if(run_numeric <= nrow(config$ssvs_settings)) {
   DO_SCALE_X <- FALSE
   
   # MCMC settings
-  NDRAW <- 10000L
-  NBURN <- 2000L
-  
-  # Prior settings
-  BETA_VARIANCE_SCALE <- 10
-  
+  NDRAW <- 50000L
+  NBURN <- 25000L
+
+  DO_CLUSTER_S2 <- TRUE
   SIGMA2_SHAPE <- NULL
   SIGMA2_RATE <- NULL
   SIGMA2_HYPER_P <- 0.9
@@ -110,24 +120,21 @@ if(run_numeric <= nrow(config$ssvs_settings)) {
   
   OUTLIER_INCL_ALPHA <- 1
   OUTLIER_INCL_BETA <- 10
-  OUTLIER_SCALE <- conf$out_scale
+  
+  DO_SV <- FALSE
+  SV_PRIOR_MU_MEAN<- NULL
+  SV_PRIOR_MU_VAR <- 100
+  SV_PRIOR_PHI_A <- 20
+  SV_PRIOR_PHI_B <- 1.5
+  SV_PRIOR_SIGMA_SHAPE <- 2.5
+  SV_PRIOR_SIGMA_RATE <- 0.025
+  SV_BACKEND <- "internal"
   
   # Advanced options
   DO_SPLIT_Z <- TRUE
-  DO_CLUSTER_S2 <- TRUE
-  # Set computational strategy
   DO_SPARSE_COMPUTATION <- FALSE
-  # Check model Validity
   DO_GEWEKE_TEST <- FALSE
-  
-  
-  # Prior specifications
-  BETA_PRIOR <- conf$beta_prior
-  STEP_SIZE_PRIOR <- conf$sis_prior
-  TAU <- conf$tau
-  DO_INDICATOR_SATURATION <- conf$check_outl
-  STEP_INCL_PRIOR <- conf$incl_prior
-  
+
   ssvs_i <- estimate_bisam(
     data = dat,
     do_constant = DO_CONST,
@@ -155,6 +162,16 @@ if(run_numeric <= nrow(config$ssvs_settings)) {
     step_size_scale = TAU,
     do_split_Z = DO_SPLIT_Z,
     do_cluster_s2 = DO_CLUSTER_S2,
+    
+    do_sv = DO_SV,
+    sv_prior_mu_mean = SV_PRIOR_MU_MEAN, 
+    sv_prior_mu_var = SV_PRIOR_MU_VAR,
+    sv_prior_phi_a = SV_PRIOR_PHI_A,
+    sv_prior_phi_b = SV_PRIOR_PHI_B,
+    sv_prior_sigma_shape = SV_PRIOR_SIGMA_SHAPE,
+    sv_prior_sigma_rate = SV_PRIOR_SIGMA_RATE,
+    sv_backend = SV_BACKEND, 
+    
     do_check_outlier = DO_INDICATOR_SATURATION,
     outlier_incl_alpha = OUTLIER_INCL_ALPHA,
     outlier_incl_beta = OUTLIER_INCL_BETA,
@@ -163,16 +180,16 @@ if(run_numeric <= nrow(config$ssvs_settings)) {
     do_geweke_test = DO_GEWEKE_TEST
   )
   
-  dir_save <- sprintf(paste0(dir_res, "ssvs_checkOutlier-%s_outscale-%s_tau-%s_prior-%s_c0-%s_C0-%s_modprior-%s_v0-%s.RDS"), 
+  dir_save <- sprintf(paste0(dir_res, 
+                             "ssvs_outlier-%s-%s_beta-%s-%s_sisprior-%s-%s_modprior-%s-%s.RDS"), 
                       conf$check_outl,
                       conf$out_scale,
-                      conf$tau,
+                      conf$beta_prior, 
+                      conf$beta_scale,
                       conf$sis_prior,
-                      if(is.null(SIGMA2_SHAPE)){"auto"}else{as.character(SIGMA2_SHAPE)},
-                      if(is.null(SIGMA2_RATE)){"auto"}else{as.character(SIGMA2_RATE)},
+                      conf$tau,
                       conf$incl_prior, 
-                      STEP_INCL_PROB)
-  
+                      STEP_INCL_PROB)  
   saveRDS(ssvs_i, dir_save)
   
 } else {

@@ -26,12 +26,12 @@ library(glmnet)  # Added for adaptive Lasso
 
 config <- expand.grid(
   sis_prior = c("imom"),
-  gets_lvl = c(0.01, 0.05),
+  gets_lvl = c(0.01),
   rel_effect = c(0.5, 1, 1.5, 2, 3, 5, 10),
-  tau = c(priorp2g(0.05, 1), priorp2g(0.01, 1)), # vary threshold?
+  tau = c(priorp2g(0.01, 1)), # vary threshold?
   number_reps = 1:100,
   setup = c("sparse", "dense"),
-  date = "2026-01-23",
+  date = "2026-07-24_SD",
   stringsAsFactors = FALSE
 )
 conf <- config[run_numeric,]
@@ -54,7 +54,7 @@ DO_INDIV_FE <- FALSE     # inclusion of indiv. fixed effects
 DO_TIME_FE <- FALSE     # inclusion of time fixed effects
 DO_OUTLIERS <- FALSE      # inclusion of indicator saturation
 DO_STEP_SATURATION <- TRUE      # inclusion of stepshift saturation
-DO_INDICATOR_SATURATION = FALSE
+DO_INDICATOR_SATURATION <- FALSE
 # Outlier and break parameters
 P_OUTL <- 0.0    # probability of outlier in a Series
 P_STEP <- 0.0    # probability of a stepshift in a Series
@@ -98,9 +98,9 @@ if (is_slurm) {
   source("../code/estimate_bisam_fun.R")
   source("../code/pip_window_fun.R")
 } else {
-  source("./Functions/contr_sim_breaks_fun.R")
-  source("./Functions/estimate_bisam_fun.R")
-  source("./Functions/pip_window_fun.R")
+  source("./R/contr_sim_breaks_fun.R")
+  source("./R/estimate_bisam_fun.R")
+  source("./R/pip_window_fun.R")
 }
 
 sim <- contr_sim_breaks(
@@ -140,12 +140,22 @@ index = c("n","t")
 # Break analysis:
 sig_lvl <- conf$gets_lvl
 
+if(DO_INDIV_FE & DO_TIME_FE) {
+  gets_fe <- "twoways"
+} else if(DO_INDIV_FE) {
+  gets_fe <- "individual"
+} else if(DO_TIME_FE) {
+  gets_fe <- "time"
+} else {
+  gets_fe <- "none"
+}
+
 # run model
 res_i <- isatpanel(
   data = cbind(dat, c = 1),
   formula = as.formula(formula),
   index = index,
-  effect = "none",
+  effect = gets_fe,
   iis = DO_INDICATOR_SATURATION,
   jsis = FALSE,
   fesis = TRUE,
