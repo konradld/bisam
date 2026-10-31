@@ -14,6 +14,7 @@ estimate_bisam <- function(
     Nburn = 2000L,
     beta_prior = "g",  # Options: "g" (Zellner's G-Prior), "f" (Hagan's Fractional Prior)
     step_size_prior = c("mom", "imom"),
+    imom_marginal = c("ala", "laplace", "ala_legacy"), # iMOM integrated likelihood (see below)
     step_incl_prior = c("bern", "beta_bern"),
     # Prior hyperparameters
     beta_variance_scale = 1000, # Variance scaling parameter for beta coefficients
@@ -267,6 +268,15 @@ estimate_bisam <- function(
   } else {
     stop("sis prior not implemented, choose step_size_prior = c('mom','imom')")
   }
+  # iMOM integrated likelihood used in the break-indicator Gibbs step (ignored for MOM):
+  #   "ala"        ALA (posterior mode + BIC-type term, as mombf) at the near-global posterior
+  #                mode (default)
+  #   "laplace"    Laplace approximation (posterior mode + Hessian) at the near-global mode;
+  #                closer to the exact integrated likelihood than ALA
+  #   "ala_legacy" ALA at the mode found by mombf 3.5.4's coordinate iteration from a ridge
+  #                start; this is often a poor local mode (results before Nov 2026)
+  imom_marginal <- match.arg(imom_marginal)
+  imom_method_code <- switch(imom_marginal, ala_legacy = 0L, ala = 1L, laplace = 2L)
   
   # --- Inclusion Prior ---
   # Code for the compiled sampler: 1 = Bernoulli(step_incl_prob), 2 = Beta-Bernoulli(alpha, beta)
@@ -618,7 +628,8 @@ estimate_bisam <- function(
         bb_b = step_incl_beta,
         niter = nn,
         burnin = nn - 1L,
-        deltaini = w_i[p_idx_rand]
+        deltaini = w_i[p_idx_rand],
+        imom_method = imom_method_code
       )
       
       w_i[p_idx_rand] <- w_i_mod$postSample[nrow(w_i_mod$postSample), ]

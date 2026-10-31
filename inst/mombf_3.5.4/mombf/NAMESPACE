@@ -2,5 +2,5 @@ useDynLib(mombf, .registration = TRUE)
 importFrom(Rcpp, evalCpp)
 importFrom(stats, nlminb, pgamma, pnorm, qgamma)
 
-export(bisam_ms_gibbs, bisam_rnlp, bisam_log_joint)
+export(bisam_ms_gibbs, bisam_rnlp, bisam_log_joint, bisam_imom_mode, bisam_set_imom_exhaustive_max, bisam_imom_stats)
 export(priorp2g, mode2g, pmom, qmom, pimom, qimom)

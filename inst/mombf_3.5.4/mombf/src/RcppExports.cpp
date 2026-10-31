@@ -11,9 +11,49 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// bisam_set_imom_exhaustive_max
+int bisam_set_imom_exhaustive_max(int mmax, int starts);
+RcppExport SEXP _mombf_bisam_set_imom_exhaustive_max(SEXP mmaxSEXP, SEXP startsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type mmax(mmaxSEXP);
+    Rcpp::traits::input_parameter< int >::type starts(startsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bisam_set_imom_exhaustive_max(mmax, starts));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bisam_imom_mode
+List bisam_imom_mode(NumericVector y, NumericMatrix x, IntegerVector sel, double tau, double phi, int method, NumericVector start);
+RcppExport SEXP _mombf_bisam_imom_mode(SEXP ySEXP, SEXP xSEXP, SEXP selSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP methodSEXP, SEXP startSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type x(xSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type sel(selSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< int >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type start(startSEXP);
+    rcpp_result_gen = Rcpp::wrap(bisam_imom_mode(y, x, sel, tau, phi, method, start));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bisam_imom_stats
+DataFrame bisam_imom_stats(bool reset);
+RcppExport SEXP _mombf_bisam_imom_stats(SEXP resetSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< bool >::type reset(resetSEXP);
+    rcpp_result_gen = Rcpp::wrap(bisam_imom_stats(reset));
+    return rcpp_result_gen;
+END_RCPP
+}
 // bisam_ms_gibbs
-List bisam_ms_gibbs(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int priorDelta, double p_incl, double bb_a, double bb_b, int niter, int burnin, LogicalVector deltaini);
-RcppExport SEXP _mombf_bisam_ms_gibbs(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP deltainiSEXP) {
+List bisam_ms_gibbs(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int priorDelta, double p_incl, double bb_a, double bb_b, int niter, int burnin, LogicalVector deltaini, int imom_method);
+RcppExport SEXP _mombf_bisam_ms_gibbs(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP deltainiSEXP, SEXP imom_methodSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -29,13 +69,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type niter(niterSEXP);
     Rcpp::traits::input_parameter< int >::type burnin(burninSEXP);
     Rcpp::traits::input_parameter< LogicalVector >::type deltaini(deltainiSEXP);
-    rcpp_result_gen = Rcpp::wrap(bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini));
+    Rcpp::traits::input_parameter< int >::type imom_method(imom_methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method));
     return rcpp_result_gen;
 END_RCPP
 }
 // bisam_log_joint
-double bisam_log_joint(NumericVector y, NumericMatrix x, IntegerVector sel, int prior, double tau, double phi, int priorDelta, double p_incl, double bb_a, double bb_b);
-RcppExport SEXP _mombf_bisam_log_joint(SEXP ySEXP, SEXP xSEXP, SEXP selSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP) {
+double bisam_log_joint(NumericVector y, NumericMatrix x, IntegerVector sel, int prior, double tau, double phi, int priorDelta, double p_incl, double bb_a, double bb_b, int imom_method);
+RcppExport SEXP _mombf_bisam_log_joint(SEXP ySEXP, SEXP xSEXP, SEXP selSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP, SEXP imom_methodSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -49,7 +90,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type p_incl(p_inclSEXP);
     Rcpp::traits::input_parameter< double >::type bb_a(bb_aSEXP);
     Rcpp::traits::input_parameter< double >::type bb_b(bb_bSEXP);
-    rcpp_result_gen = Rcpp::wrap(bisam_log_joint(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b));
+    Rcpp::traits::input_parameter< int >::type imom_method(imom_methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(bisam_log_joint(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -73,8 +115,11 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_mombf_bisam_ms_gibbs", (DL_FUNC) &_mombf_bisam_ms_gibbs, 12},
-    {"_mombf_bisam_log_joint", (DL_FUNC) &_mombf_bisam_log_joint, 10},
+    {"_mombf_bisam_set_imom_exhaustive_max", (DL_FUNC) &_mombf_bisam_set_imom_exhaustive_max, 2},
+    {"_mombf_bisam_imom_mode", (DL_FUNC) &_mombf_bisam_imom_mode, 7},
+    {"_mombf_bisam_imom_stats", (DL_FUNC) &_mombf_bisam_imom_stats, 1},
+    {"_mombf_bisam_ms_gibbs", (DL_FUNC) &_mombf_bisam_ms_gibbs, 13},
+    {"_mombf_bisam_log_joint", (DL_FUNC) &_mombf_bisam_log_joint, 11},
     {"_mombf_bisam_rnlp", (DL_FUNC) &_mombf_bisam_rnlp, 8},
     {NULL, NULL, 0}
 };
