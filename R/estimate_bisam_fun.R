@@ -258,23 +258,28 @@ estimate_bisam <- function(
   # beta_var_inv <- XX / beta_variance_scale
   
   # --- Structural Break Prior (MOM/iMOM) ---
+  # Passed to the compiled sampler as a code: 0 = product MOM (r = 1), 1 = product iMOM
+  step_size_prior <- step_size_prior[1]
   if (step_size_prior == "imom") {
-    sis_prior_f <- mombf::imomprior(tau = step_size_scale)
+    sis_prior_code <- 1L
   } else if (step_size_prior == "mom") {
-    sis_prior_f <- mombf::momprior(tau = step_size_scale)
+    sis_prior_code <- 0L
   } else {
     stop("sis prior not implemented, choose step_size_prior = c('mom','imom')")
   }
   
   # --- Inclusion Prior ---
+  # Code for the compiled sampler: 1 = Bernoulli(step_incl_prob), 2 = Beta-Bernoulli(alpha, beta)
+  step_incl_prior <- step_incl_prior[1]
   if (step_incl_prior == "bern") {
-    incl_prior_f <- mombf::modelbinomprior(step_incl_prob) # change for Jakob!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # incl_prior_f <- BISAM::modelbinomprior(step_incl_prob) # change for Jakob
+    if (step_incl_prob <= 0 || step_incl_prob > 1) stop("step_incl_prob must lie in (0, 1]")
+    incl_prior_code <- 1L
     cat("Inclusion prior is Bernoulli(step_incl_prob) - 'step_incl_alpha' and 'step_incl_beta' have no meaning\n")
   } else if (step_incl_prior == "beta_bern") {
-    incl_prior_f <- mombf::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # incl_prior_f <- BISAM::modelbbprior(step_incl_alpha, step_incl_beta) # change for Jakob
+    incl_prior_code <- 2L
     cat("Inclusion prior is Beta-Bernoulli(step_incl_alpha, step_incl_beta) - 'step_incl_prob' has no meaning\n")
+  } else {
+    stop("step_incl_prior not implemented, choose step_incl_prior = c('bern','beta_bern')")
   }
   
   # ============================================================================
@@ -413,10 +418,10 @@ estimate_bisam <- function(
   XX_inv <- solve(XX)
   sqrt_outlier_scale <- sqrt(outlier_scale)
   
-  nn <- 2 # number of modelSelection iterations
+  nn <- 2 # number of model-selection Gibbs iterations (burn-in nn - 1)
   
-  ngdraw <- 1 # number of rnlp_new iterations saved
-  ngburn <- 2 # number of rnlp_new iterations burned
+  ngdraw <- 1 # number of break-size (rnlp) Gibbs iterations saved
+  ngburn <- 2 # number of break-size (rnlp) Gibbs iterations burned
   
   # Initialize objects in loop
   y_aug <- y
@@ -436,6 +441,19 @@ estimate_bisam <- function(
     batch <- matrix(1:r, ncol = r)
   }
   obs_with_steps <- unique(ceiling(steps_to_check / (t - 3)))
+  
+  # Per-batch column indices and dense break-design blocks (fixed over the sampler)
+  p_idx_list <- lapply(seq_len(nrow(batch)), function(j) {
+    p_idx_full <- batch[j, ]
+    p_idx_full[p_idx_full %in% steps_to_check]
+  })
+  n_idx_list <- lapply(seq_len(nrow(batch)), function(j) if (do_split_Z) N_idx[j, ] else 1:N)
+  Z_block <- lapply(seq_len(nrow(batch)), function(j) {
+    zb <- as.matrix(Z[n_idx_list[[j]], p_idx_list[[j]], drop = FALSE])
+    storage.mode(zb) <- "double"
+    zb
+  })
+  storage.mode(z) <- "double"
   
   # ============================================================================
   # GIBBS SAMPLER
@@ -568,124 +586,49 @@ estimate_bisam <- function(
     for (j in obs_with_steps) {
       
       p_idx_full <- batch[j, ]
-      p_idx <- p_idx_full[p_idx_full %in% steps_to_check]
+      p_idx <- p_idx_list[[j]]
       p_idx_rand <- p_idx  # Keep order intact (can be randomized: sample(p_idx))
+      n_idx <- n_idx_list[[j]]
       
-      if (do_split_Z) {
-        n_idx <- N_idx[j,]
-      } else {
-        n_idx <- 1:N
-      }
-      
-      # Set initial parameters
-      if (i == (1 - Nburn)) {
-        initpar <- "auto"
-      } else {
-        initpar <- g_i[p_idx_rand]
-      }
-      
-      # Set variance prior
-      if (do_sv) {
-        # y and Z are standardized below by the per-observation sqrt-variance, so the
-        # working residual variance is ~1: use a unit-scaled inverse-gamma prior (mean 1).
-        var_prior_f <- igprior(3, 2)
-      } else if (do_cluster_s2) {
-        var_prior_f <- igprior(sigma2_shape[j], sigma2_rate[j])
-      } else {
-        var_prior_f <- igprior(sigma2_shape, sigma2_rate)
-      }
-      
+      # Note: the residual-variance prior plays no role here. phi is known (= 1 after
+      # standardisation) both in the model selection and in the break-size draws.
       if (do_sv) {
         # Full GLS standardization by the time-varying (and outlier-inflated) variance,
         # so the model-selection regression has unit-variance errors (phi = 1 below).
         sqrt_total_var_j <- sqrt((s2_i * lambda_i)[n_idx])
-        Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE] / sqrt_total_var_j
+        Z_std_j <- Z_block[[j]] / sqrt_total_var_j
       } else if (do_check_outlier) {
-        lambda_j <- lambda_i[n_idx]
-        sqrt_total_var_j <- sqrt(lambda_j)
-        Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE] / sqrt_total_var_j
+        sqrt_total_var_j <- sqrt(lambda_i[n_idx])
+        Z_std_j <- Z_block[[j]] / sqrt_total_var_j
       } else {
-        Z_std_j <- Z[n_idx, p_idx_rand, drop = FALSE]
+        Z_std_j <- Z_block[[j]]
       }
       
-      # Model selection using mombf # change for Jakob
-      w_i_mod <- mombf::modelSelection(
+      # Model selection: Gibbs sweeps over this unit's break indicators with ALA
+      # integrated likelihoods (compiled core of the bespoke mombf, known phi = 1)
+      w_i_mod <- mombf::bisam_ms_gibbs(
         y = y_tmp_sd[n_idx],
         x = Z_std_j,
-        groups = 1:length(p_idx),
-        nknots = 9,
-        center = FALSE,
-        scale = FALSE,
-        enumerate = FALSE,
-        includevars = rep(FALSE, length(p_idx)),
-        niter = nn,
-        thinning = 1,
-        burnin = nn - 1,
-        family = "normal",
-        priorCoef = sis_prior_f,
-        priorDelta = incl_prior_f,
+        prior = sis_prior_code,
+        tau = step_size_scale,
         phi = 1,
-        deltaini = w_i[p_idx_rand],
-        initSearch = 'none',
-        method = 'ALA',
-        hess = "asymp",
-        initpar = initpar,
-        adj.overdisp = 'intercept',
-        optimMethod = "auto",
-        optim_maxit = 10,
-        B = 10^5,
-        priorVar = var_prior_f,
-        priorSkew = momprior(tau = step_size_scale),
-        XtXprecomp = TRUE,
-        verbose = FALSE
+        priorDelta = incl_prior_code,
+        p_incl = step_incl_prob,
+        bb_a = step_incl_alpha,
+        bb_b = step_incl_beta,
+        niter = nn,
+        burnin = nn - 1L,
+        deltaini = w_i[p_idx_rand]
       )
       
-      # # Model selection using BISAM # change for Jakob
-      # w_i_mod <- BISAM::fast_model_selection(
-      #   y = y_tmp_sd[n_idx],
-      #   x = Z_std_j,
-      #   # groups = 1:length(p_idx),
-      #   # nknots = 9,
-      #   center = FALSE,
-      #   scale = FALSE,
-      #   # enumerate = FALSE,
-      #   # includevars = rep(FALSE, length(p_idx)),
-      #   niter = nn,
-      #   thinning = 1,
-      #   burnin = nn - 1,
-      #   # family = "normal",
-      #   # priorCoef = sis_prior_f@priorPars["tau"],
-      #   tau = sis_prior_f@priorPars["tau"],
-      #   priorDelta = incl_prior_f,
-      #   phi = 1,
-      #   thinit = g_i[p_idx_rand],
-      #   initpar_type = 0,
-      #   deltaini = w_i[p_idx_rand],
-      #   # initSearch = 'none',
-      #   method = 0, #'ALA', !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      #   hesstype = 1, #"asymp", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      #   # initpar = initpar,
-      #   # adj.overdisp = 'intercept',
-      #   optimMethod = 2, #"auto", !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      #   optim_maxit = 10,
-      #   B = 10^5,
-      #   knownphi = 1,
-      #   # priorVar = var_prior_f,
-      #   priorSkew = BISAM::momprior(tau = step_size_scale)$tau,
-      #   computation_strategy = BISAM::STANDARD(), # !!!!!!!!!!!!!!!!!!!!!!!!!!
-      #   XtXprecomp = TRUE#,
-      #   # verbose = FALSE
-      # )
-      
-      w_i[p_idx_rand] <- as.logical(w_i_mod$postSample) # change for Jakob !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      # w_i[p_idx_rand] <- as.logical(w_i_mod$post_sample) # change for Jakob
+      w_i[p_idx_rand] <- w_i_mod$postSample[nrow(w_i_mod$postSample), ]
       pip_i[p_idx_rand] <- w_i_mod$margpp
       
       # ========================================================================
       # DRAW p(gamma | omega, beta, sigma^2, y) - Break Magnitudes
       # ========================================================================
+      g_draw <- numeric(length(p_idx_full))
       if (any(w_i[p_idx_rand])) {
-        g_draw <- matrix(0, nrow = ngdraw, ncol = t - 2)
         colsel <- which(w_i[p_idx_full] == TRUE)
         
         # --- Adjust for time-varying / outlier variance inflation ---
@@ -707,25 +650,21 @@ estimate_bisam <- function(
           phi_rnlp <- s2_i_tmp[j]
         }
         
-        g_draw[1, c(colsel, t - 2)] <- rnlp_new( # the t-2 is for the sigma^2 that is thrown away if sigma is known
-          y = y_rnlp,
+        # Non-local posterior draw of the selected break sizes (known phi), started at
+        # the last non-zero draw of each break
+        g_draw[colsel] <- mombf::bisam_rnlp(
+          y = as.vector(y_rnlp),
           x = z_rnlp,
-          priorCoef = sis_prior_f,
-          priorGroup = sis_prior_f,
-          priorVar = var_prior_f,
-          isgroup = rep(FALSE, length(colsel)),
+          prior = sis_prior_code,
+          tau = step_size_scale,
+          phi = phi_rnlp,
           niter = ngburn + ngdraw,
           burnin = ngburn,
-          knownphi = TRUE,
-          phi = phi_rnlp,
-          use_thinit = TRUE,
           thinit = g_incl_i[p_idx_full][colsel]
         )
         g_incl_i[p_idx][w_i[p_idx]] <- g_draw[colsel]
-      } else {
-        g_draw <- matrix(0, nrow = ngdraw, ncol = t - 2)
       }
-      g_i[p_idx_full] <- g_draw[-(t - 2)]  # Remove phi estimate
+      g_i[p_idx_full] <- g_draw
     }
     
     Zg_i <- Z[, w_i, drop = FALSE] %*% g_i[w_i]
@@ -913,7 +852,13 @@ safe_invert <- function(m, do_sparse_computation = TRUE) {
   if (!do_sparse_computation && inherits(m, "sparseMatrix")) {
     m <- as.matrix(m)
   }
-  
+
+  # Dense fast path: base solve() avoids the S4 dispatch cost of Matrix::solve()
+  if (is.matrix(m)) {
+    ans <- tryCatch(base::solve(m), error = function(e) NULL)
+    if (!is.null(ans)) return(ans)
+  }
+
   tryCatch(Matrix::solve(m), error = function(e) {
     tryCatch({
       if (do_sparse_computation && inherits(m, "sparseMatrix")) {

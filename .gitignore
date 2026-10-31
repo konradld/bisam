@@ -3,3 +3,7 @@
 .RData
 .Ruserdata
 .positai
+# compiled objects of the bespoke mombf
+inst/mombf_3.5.4/mombf/src/*.o
+inst/mombf_3.5.4/mombf/src/*.so
+inst/mombf_3.5.4/mombf/src/*.dll

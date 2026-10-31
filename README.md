@@ -21,8 +21,8 @@ BISAM provides a Bayesian approach to detecting structural breaks in time series
 
 ### Installation
 
-- **`install_bespoke_mombf_3.5.4.R`**  
-  Installs a bespoke version of the `mombf` package (based on version 3.5.4) required for the estimation functions. This modified version is included in the repository and must be installed before using `estimate_bisam_fun.R`.
+- **`inst/install_bespoke_mombf_3.5.4.R`**  
+  Installs a bespoke, stripped-down version of the `mombf` package (based on version 3.5.4) required for the estimation functions. It contains only what `estimate_bisam_fun.R` needs (compiled break-indicator Gibbs sampler with a faster exact iMOM mode solver, non-local break-size draws, and `priorp2g()`); see `inst/mombf_3.5.4/mombf/README.md`. It must be installed before using `estimate_bisam_fun.R`, and it replaces a CRAN `mombf` in the same library (scripts that need the full package, such as `scripts/16_prior_comparison_rates.R`, should use CRAN `mombf`).
 
 ### Examples and Simulations
 
@@ -46,7 +46,7 @@ cd bisam
 
 2. Install the bespoke mombf package:
 ```r
-source("install_bespoke_mombf_3.5.4.R")
+source("inst/install_bespoke_mombf_3.5.4.R")
 ```
 
 3. Load required functions:
