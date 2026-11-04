@@ -38,6 +38,7 @@ estimate_bisam <- function(
     sv_prior_sigma_rate = 0.025,
     sv_backend = c("internal", "stochvol"), # SV sampler: hand-rolled KSC/FFBS ("internal") or stochvol::update_fast_sv ("stochvol")
     do_check_outlier = FALSE,
+    outlier_prior = c("imom", "norm"), # Outlier mixture distribution component
     outlier_incl_alpha = 1,     # P(outlier) ~ Beta(outlier_incl_alpha, outlier_incl_beta)
     outlier_incl_beta = 10,     # P(outlier) ~ Beta(outlier_incl_alpha, outlier_incl_beta)
     outlier_scale = 10,
@@ -292,6 +293,14 @@ estimate_bisam <- function(
     stop("step_incl_prior not implemented, choose step_incl_prior = c('bern','beta_bern')")
   }
   
+  # --- Outlier Prior ---
+  outlier_prior <- match.arg(outlier_prior)
+  if(!outlier_prior %in% c("imom", "norm")) {
+    stop("outlier prior not implemented, choose outlier_prior = c('imom','norm')")
+  }
+  sqrt_outlier_scale <- sqrt(outlier_scale)
+  
+  
   # ============================================================================
   # STARTING VALUES
   # ============================================================================
@@ -375,6 +384,9 @@ estimate_bisam <- function(
   pip_i <- numeric(r)
   
   # --- Outlier variance inflation factor ---
+  lambda <- ifelse(outlier_prior == "imom", 
+                   2 * outlier_scale, # 2*tau*s2 is variance of iMom(0,1,3,tau,s2) 
+                   outlier_scale)     # tau*s2 for N(0, tau*s2)
   lambda_i <- rep(1, N)
   
   # --- Starting Values for Horseshoe Plug-In ---
@@ -487,18 +499,18 @@ estimate_bisam <- function(
       # Compute log probabilities for outlier models
       log_p0 <- dnorm(residuals, 0, sqrt_s2_i, log = TRUE) + log(1 - k_i)
       
-      # PICK OUTLIER DISTRIBUTION
-      log_p1 <- log_dimom(residuals, gamma0=0, k=1, nu=3, tau=outlier_scale, sigma2=s2_i) + log(k_i)
-      # log_p1 <- dnorm(residuals, 0, sqrt_outlier_scale * sqrt_s2_i, log = TRUE) + log(k_i)
+      if(outlier_prior == "imom") {
+        log_p1 <- log_dimom(residuals, gamma0 = 0, k = 1, nu = 3, tau = outlier_scale, sigma2 = s2_i) + log(k_i)
+      } else if(outlier_prior == "norm") {
+        log_p1 <- dnorm(residuals, 0, sqrt_outlier_scale * sqrt_s2_i, log = TRUE) + log(k_i)
+      }
       
       # Direct calculation of log probability
       log_prob_outlier <- log_p1 - matrixStats::rowLogSumExps(cbind(log_p0, log_p1))
       o_i <- rbinom(N, 1, exp(log_prob_outlier)) # works
       
       # UPDATE VARIANCE INFLATION FACTORS
-      lambda_i <- ifelse(o_i == 0, 1, 2 * outlier_scale) # 2*tau*s2 is the variance of iMom(0,1,3,tau,s2)
-      # lambda_i <- ifelse(o_i == 0, 1, outlier_scale)
-      
+      lambda_i <- ifelse(o_i == 0, 1, lambda)
     }
     
     # ==========================================================================
