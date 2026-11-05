@@ -14,7 +14,7 @@ estimate_bisam <- function(
     Nburn = 2000L,
     beta_prior = "g",  # Options: "g" (Zellner's G-Prior), "f" (Hagan's Fractional Prior)
     step_size_prior = c("mom", "imom"),
-    imom_marginal = c("ala", "laplace", "ala_legacy"), # iMOM integrated likelihood (see below)
+    imom_marginal = c("ala_legacy", "ala", "laplace"), # iMOM integrated likelihood (see below)
     step_incl_prior = c("bern", "beta_bern"),
     # Prior hyperparameters
     beta_variance_scale = 1000, # Variance scaling parameter for beta coefficients
@@ -195,7 +195,7 @@ estimate_bisam <- function(
     print("Sigma^2 prior is inadmissable. Using default spec. based on OLS")
     if(do_sparse_computation) {
       mod_prior <- list()
-      mod_prior$coefficients <- MatrixModels:::lm.fit.sparse(X, y)
+      mod_prior$coefficients <- sparse_lm_coef(X, y)
       mod_prior$residuals <- as.vector(y - X %*% mod_prior$coefficients)
     } else {
       mod_prior <- lm.fit(X, y)
@@ -229,7 +229,7 @@ estimate_bisam <- function(
     if (!exists("mod_prior")) {
       if(do_sparse_computation) {
         mod_prior <- list()
-        mod_prior$coefficients <- MatrixModels:::lm.fit.sparse(X, y)
+        mod_prior$coefficients <- sparse_lm_coef(X, y)
         mod_prior$residuals <- as.vector(y - X %*% mod_prior$coefficients)
       } else {
         mod_prior <- lm.fit(X, y)
@@ -241,7 +241,7 @@ estimate_bisam <- function(
       idx[res2[idx] < quantile(res2[idx], 0.90)]
     }))
     if(do_sparse_computation) {
-      beta_mean <- MatrixModels:::lm.fit.sparse(X[select_i,, drop = FALSE], y[select_i,])
+      beta_mean <- sparse_lm_coef(X[select_i,, drop = FALSE], y[select_i,])
     } else {
       beta_mean <- lm.fit(X[select_i,, drop = FALSE], y[select_i,])$coefficients
     }
@@ -270,12 +270,12 @@ estimate_bisam <- function(
     stop("sis prior not implemented, choose step_size_prior = c('mom','imom')")
   }
   # iMOM integrated likelihood used in the break-indicator Gibbs step (ignored for MOM):
+  #   "ala_legacy" ALA at the mode found by mombf 3.5.4's coordinate iteration from a ridge
+  #                start (default; fastest, results as in mombf)
   #   "ala"        ALA (posterior mode + BIC-type term, as mombf) at the near-global posterior
-  #                mode (default)
+  #                mode (more accurate integrated likelihood, ~1.5-3.5x slower)
   #   "laplace"    Laplace approximation (posterior mode + Hessian) at the near-global mode;
   #                closer to the exact integrated likelihood than ALA
-  #   "ala_legacy" ALA at the mode found by mombf 3.5.4's coordinate iteration from a ridge
-  #                start; this is often a poor local mode (results before Nov 2026)
   imom_marginal <- match.arg(imom_marginal)
   imom_method_code <- switch(imom_marginal, ala_legacy = 0L, ala = 1L, laplace = 2L)
   
@@ -316,7 +316,7 @@ estimate_bisam <- function(
     if (!exists("mod_prior")) {
       if (do_sparse_computation) {
         mod_prior <- list()
-        mod_prior$coefficients <- MatrixModels:::lm.fit.sparse(X, y)
+        mod_prior$coefficients <- sparse_lm_coef(X, y)
         mod_prior$residuals <- as.vector(y - X %*% mod_prior$coefficients)
       } else {
         mod_prior <- lm.fit(X, y)
@@ -438,6 +438,11 @@ estimate_bisam <- function(
   
   # Pre-compute
   XX_inv <- solve(XX)
+  # Per-unit Gram matrices X_u'X_u (column u of G_unit = vec of a p x p matrix), used to form
+  # X'WX cheaply when the weights are constant within units apart from flagged outliers
+  if (!do_sparse_computation && !do_sv) {
+    G_unit <- vapply(seq_len(n), function(u) as.vector(crossprod(X[N_idx[u, ], , drop = FALSE])), numeric(p * p))
+  }
   sqrt_outlier_scale <- sqrt(outlier_scale)
   
   nn <- 2 # number of model-selection Gibbs iterations (burn-in nn - 1)
@@ -556,8 +561,51 @@ estimate_bisam <- function(
     # ==========================================================================
     # DRAW p(beta | sigma^2, gamma, y)
     # ==========================================================================
-    if (beta_prior == "g" || beta_prior == "f"|| beta_prior == "flasso" || beta_prior == "f_indep") {
-      
+    if (!(beta_prior %in% c("g", "f", "flasso", "f_indep"))) {
+      stop("For 'beta' only g-prior and fractional-prior is implemented!")
+    }
+    if (!do_sparse_computation) {
+      # Dense path: one Cholesky factor R of the posterior precision (R'R = Prec) gives
+      # both the posterior mean (two triangular solves) and the draw bN + R^{-1} z.
+      weighted <- do_check_outlier || do_cluster_s2 || do_sv
+      if (weighted) {
+        w_obs <- 1 / (s2_i * lambda_i)
+        if (!do_sv) {
+          # weights = 1/s2 per unit (or overall), times 1/lambda for flagged outliers:
+          # X'WX = sum_u X_u'X_u / s2_u + outlier-row corrections (per-unit Gram matrices precomputed)
+          s2_unit <- if (do_cluster_s2) s2_i_unique else rep(s2_i_unique, n)
+          XtWX <- matrix(G_unit %*% (1 / s2_unit), p, p)
+          jj <- which(lambda_i != 1)
+          if (length(jj) > 0) {
+            Xo <- X[jj, , drop = FALSE]
+            XtWX <- XtWX + crossprod(Xo * (w_obs[jj] - 1 / s2_i[jj]), Xo)
+          }
+        } else {
+          XtWX <- crossprod(X * sqrt(w_obs))
+        }
+        XtWy <- crossprod(X, w_obs * y_tmp)
+      } else {
+        XtWX <- XX / s2_i_unique
+        XtWy <- crossprod(X, y_tmp) / s2_i_unique
+      }
+      if (beta_prior == "f_indep") {
+        prior_prec <- beta_var_inv
+      } else {
+        prior_prec <- XtWX / beta_variance_scale  # g-prior conditional on lambda_i (and s2)
+      }
+      Prec <- prior_prec + XtWX
+      rhs <- XtWy + prior_prec %*% beta_mean
+      R_prec <- tryCatch(chol(Prec), error = function(e) NULL)
+      if (!is.null(R_prec)) {
+        bN <- backsolve(R_prec, backsolve(R_prec, rhs, transpose = TRUE))
+        b_i <- bN + backsolve(R_prec, rnorm(p))
+      } else {
+        BN <- safe_invert(Prec, do_sparse_computation)
+        bN <- BN %*% rhs
+        b_i <- t(rmvnorm(1, as.vector(bN), as.matrix(BN)))
+      }
+    } else {
+      # Sparse path (unchanged)
       if (do_check_outlier || do_cluster_s2 || do_sv) {
         XtW <- X / (s2_i * lambda_i)
         XtWX <- crossprod(XtW, X)
@@ -566,17 +614,14 @@ estimate_bisam <- function(
         if (beta_prior == "f_indep") {
           BN <- safe_invert(beta_var_inv + XtWX, do_sparse_computation)
         } else {
-          # beta_var_inv <- crossprod(X / (beta_variance_scale * s2_i_unique), X) # g-prior unconditional on lambda_i
           beta_var_inv <- XtWX / beta_variance_scale # g-prior conditional on lambda_i
           BN <- safe_invert(beta_var_inv + XtWX, do_sparse_computation)
         }
         bN <- BN %*% (XtWy + beta_var_inv %*% beta_mean)
-      }
-      else {
+      } else {
         if (beta_prior == "f_indep") {
           XtSX <- XX / s2_i_unique
           XtSy <- crossprod(X, y_tmp) / s2_i_unique
-          
           BN <- safe_invert(beta_var_inv + XtSX, do_sparse_computation)
           bN <- BN %*% (XtSy + beta_var_inv %*% beta_mean)
         } else {
@@ -585,12 +630,9 @@ estimate_bisam <- function(
             (beta_variance_scale * XX_inv %*% crossprod(X, y_tmp) + beta_mean)
         }
       }
-    } else {
-      stop("For 'beta' only g-prior and fractional-prior is implemented!")
+      b_i <- try((bN + t(chol(BN)) %*% rnorm(p)), silent = TRUE)
+      if (is(b_i, "try-error")) { b_i <- t(rmvnorm(1, as.vector(bN), as.matrix(BN))) }
     }
-    
-    b_i <- try((bN + t(chol(BN)) %*% rnorm(p)), silent = TRUE)
-    if (is(b_i, "try-error")) { b_i <- t(rmvnorm(1, as.vector(bN), as.matrix(BN))) }
     
     Xb_i <- X %*% b_i
     
@@ -729,18 +771,15 @@ estimate_bisam <- function(
   p_outl_hat <- colMeans(o_store)
   
   # --- Credible Intervals ---
+  # (matrixStats::colQuantiles uses the same default as quantile(), type 7)
+  ci_probs <- c((1 - cred_int) / 2, 1 - (1 - cred_int) / 2)
+  ci_b  <- matrixStats::colQuantiles(b_store,  probs = ci_probs, drop = FALSE)
+  ci_g  <- matrixStats::colQuantiles(g_store,  probs = ci_probs, drop = FALSE)
+  ci_s2 <- matrixStats::colQuantiles(s2_store, probs = ci_probs, drop = FALSE)
   estimates <- data.frame(
     MAP = c(beta_hat, gamma_hat, s2_hat),
-    CI_Lower = c(
-      apply(b_store, 2, quantile, (1 - cred_int) / 2),
-      apply(g_store, 2, quantile, (1 - cred_int) / 2),
-      apply(s2_store, 2, quantile, (1 - cred_int) / 2)
-    ),
-    CI_Upper = c(
-      apply(b_store, 2, quantile, 1 - (1 - cred_int) / 2),
-      apply(g_store, 2, quantile, 1 - (1 - cred_int) / 2),
-      apply(s2_store, 2, quantile, 1 - (1 - cred_int) / 2)
-    ),
+    CI_Lower = c(ci_b[, 1], ci_g[, 1], ci_s2[, 1]),
+    CI_Upper = c(ci_b[, 2], ci_g[, 2], ci_s2[, 2]),
     PIP = c(
       rep(NA, ncol(b_store)),
       omega_hat,
@@ -863,6 +902,17 @@ inv_gamma_params_dual <- function(x1, p1, x2, p2) {
   )
   
   return(list(shape = result$x[1], scale = result$x[2]))
+}
+
+#===============================================================================
+#
+#                  Helper Function for sparse least squares
+#
+#===============================================================================
+# MatrixModels:::lm.fit.sparse needs a sparse design and a numeric response; X can still be
+# dense here (e.g. no fixed effects) and y is a one-column matrix.
+sparse_lm_coef <- function(X, y) {
+  MatrixModels:::lm.fit.sparse(as(as(X, "CsparseMatrix"), "generalMatrix"), as.numeric(y))
 }
 
 #===============================================================================

@@ -7,9 +7,9 @@
 //      - pMOM : ALA, plug-in of the Gaussian posterior mean into the MOM penalty
 //               (mombf pmomMarginalKC, method 2)
 //      - piMOM: posterior mode th* of the iMOM posterior, then (imom_method)
-//          0  ALA at the mode reached by mombf's own iteration (legacy; often a poor
-//             local mode under the collinear step design)
-//          1  ALA at a near-global mode (default)
+//          0  ALA at the mode reached by mombf's own iteration (default; as mombf, fastest;
+//             often a poor local mode under the collinear step design)
+//          1  ALA at a near-global mode
 //          2  Laplace (Hessian) at the near-global mode
 //        where ALA = log integrand at th* - m/2 log(n) (mombf pimomMarginalKC, method 2).
 //    Legacy mode: mombf's iteration (ridge start, Gauss-Seidel sweeps, smallest same-sign
@@ -102,6 +102,12 @@ static double safeguarded_root(double a, double B, double c, double lo, double h
     if (h == 0.0) return y;
     if (h < 0.0) lo = y; else hi = y;
     double hp = y * ((4.0 * a * y - 3.0 * B) * y + 4.0);
+    if (hp > 0.0) {
+      double step = h / hp;
+      // converged: test BEFORE the bracket check, otherwise a Newton step that rounds to
+      // zero (ynew == y == lo or hi) falls back to bisection over the whole bracket
+      if (std::fabs(step) <= 4e-16 * y) return y - step;
+    }
     double ynew = (hp > 0.0) ? y - h / hp : 0.5 * (lo + hi);
     if (!(ynew > lo && ynew < hi)) ynew = 0.5 * (lo + hi);
     if (std::fabs(ynew - y) <= 4e-16 * y || hi - lo <= 4e-16 * hi) return ynew;
@@ -123,6 +129,35 @@ static double smallest_positive_root(double a, double B, double c, double ystart
   return safeguarded_root(a, B, c, lo, hi, ystart);
 }
 
+// Small dense Cholesky (lower, in place, row-major m x m) and solve; false if not PD.
+static bool chol_inplace(std::vector<double> &M, int m) {
+  for (int j = 0; j < m; j++) {
+    double d = M[j * m + j];
+    for (int k = 0; k < j; k++) d -= M[j * m + k] * M[j * m + k];
+    if (!(d > 0.0)) return false;
+    d = std::sqrt(d);
+    M[j * m + j] = d;
+    for (int i = j + 1; i < m; i++) {
+      double v = M[i * m + j];
+      for (int k = 0; k < j; k++) v -= M[i * m + k] * M[j * m + k];
+      M[i * m + j] = v / d;
+    }
+  }
+  return true;
+}
+static void chol_solve(const std::vector<double> &L, int m, const double *rhs, double *x) {
+  for (int i = 0; i < m; i++) {
+    double v = rhs[i];
+    for (int k = 0; k < i; k++) v -= L[i * m + k] * x[k];
+    x[i] = v / L[i * m + i];
+  }
+  for (int i = m - 1; i >= 0; i--) {
+    double v = x[i];
+    for (int k = i + 1; k < m; k++) v -= L[k * m + i] * x[k];
+    x[i] = v / L[i * m + i];
+  }
+}
+
 // piMOM posterior mode, replicating mombf's imomModeK + imomIntegralApproxC exactly:
 // ridge start (A + tau I)^{-1} b, Gauss-Seidel sweeps over coordinates, each coordinate set
 // to the smallest stationary point on its current sign side, stop when the largest change in
@@ -132,29 +167,34 @@ static double smallest_positive_root(double a, double B, double c, double ystart
 // iteration's mode would make the integrated likelihood depend on the chain's history; the
 // ridge start keeps it a deterministic function of (data, model), as in mombf.
 static double imom_mode_legacy(const ImomObj &O, double tau, arma::vec &th) {
-  const arma::uword m = O.b.n_elem;
-  arma::mat V = O.A;
-  V.diag() += tau;
-  arma::mat L;
-  if (arma::chol(L, V, "lower")) {
-    th = arma::solve(arma::trimatu(L.t()), arma::solve(arma::trimatl(L), O.b));
+  const int m = (int) O.b.n_elem;
+  const double *A = O.A.memptr();   // column-major, symmetric
+  th.set_size(m);
+  // ridge start (A + tau I)^{-1} b by Cholesky (no condition-number estimate)
+  std::vector<double> V(A, A + (size_t) m * m);
+  for (int i = 0; i < m; i++) V[i * m + i] += tau;
+  if (chol_inplace(V, m)) {
+    chol_solve(V, m, O.b.memptr(), th.memptr());
   } else {
-    th = arma::solve(V, O.b);
+    arma::mat Vm = O.A; Vm.diag() += tau;
+    th = arma::solve(Vm, O.b);
   }
-  arma::vec r = O.A * th;   // r = A th, kept current so each partial residual is O(1)
+  std::vector<double> r(m);         // r = A th, kept current so each partial residual is O(1)
+  for (int i = 0; i < m; i++) { double v = 0.0; for (int j = 0; j < m; j++) v += A[j * m + i] * th[j]; r[i] = v; }
   double err = 1.0;
   for (int sweep = 0; sweep < 50 && err > 1e-5; sweep++) {
     err = 0.0;
-    for (arma::uword i = 0; i < m; i++) {
+    for (int i = 0; i < m; i++) {
       double ti = th[i];
       if (ti == 0.0) continue;  // mombf never moves an exact zero (no same-sign root)
-      double a = O.A(i, i) / O.phi;
-      double bb = (O.b[i] - (r[i] - O.A(i, i) * ti)) / O.phi;
+      const double *Ai = A + (size_t) i * m;
+      double a = Ai[i] / O.phi;
+      double bb = (O.b[i] - (r[i] - Ai[i] * ti)) / O.phi;
       double s = (ti > 0.0) ? 1.0 : -1.0;
       double y = smallest_positive_root(a, s * bb, O.c, std::fabs(ti));
-      double tnew = s * y;
-      err = std::max(err, std::fabs(ti - tnew));
-      r += O.A.col(i) * (tnew - ti);
+      double tnew = s * y, d = tnew - ti;
+      err = std::max(err, std::fabs(d));
+      for (int k = 0; k < m; k++) r[k] += Ai[k] * d;
       th[i] = tnew;
     }
   }
@@ -209,35 +249,6 @@ static double best_positive_min(double a, double B, double c, double ystart, dou
   }
   *gval = best_g;
   return best_y;
-}
-
-// Small dense Cholesky (lower, in place, row-major m x m) and solve; false if not PD.
-static bool chol_inplace(std::vector<double> &M, int m) {
-  for (int j = 0; j < m; j++) {
-    double d = M[j * m + j];
-    for (int k = 0; k < j; k++) d -= M[j * m + k] * M[j * m + k];
-    if (!(d > 0.0)) return false;
-    d = std::sqrt(d);
-    M[j * m + j] = d;
-    for (int i = j + 1; i < m; i++) {
-      double v = M[i * m + j];
-      for (int k = 0; k < j; k++) v -= M[i * m + k] * M[j * m + k];
-      M[i * m + j] = v / d;
-    }
-  }
-  return true;
-}
-static void chol_solve(const std::vector<double> &L, int m, const double *rhs, double *x) {
-  for (int i = 0; i < m; i++) {
-    double v = rhs[i];
-    for (int k = 0; k < i; k++) v -= L[i * m + k] * x[k];
-    x[i] = v / L[i * m + i];
-  }
-  for (int i = m - 1; i >= 0; i--) {
-    double v = x[i];
-    for (int k = i + 1; k < m; k++) v -= L[k * m + i] * x[k];
-    x[i] = v / L[i * m + i];
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -571,7 +582,7 @@ static double log_joint(const MsProblem &P, const std::vector<arma::uword> &sel)
 // [[Rcpp::export]]
 List bisam_ms_gibbs(NumericVector y, NumericMatrix x, int prior, double tau, double phi,
                     int priorDelta, double p_incl, double bb_a, double bb_b,
-                    int niter, int burnin, LogicalVector deltaini, int imom_method = 1) {
+                    int niter, int burnin, LogicalVector deltaini, int imom_method = 0) {
   MsProblem P;
   P.n = y.size(); P.K = x.ncol();
   if (x.nrow() != P.n) stop("bisam_ms_gibbs: dimensions of y and x do not match");
@@ -645,7 +656,7 @@ List bisam_ms_gibbs(NumericVector y, NumericMatrix x, int prior, double tau, dou
 // [[Rcpp::export]]
 double bisam_log_joint(NumericVector y, NumericMatrix x, IntegerVector sel, int prior, double tau,
                        double phi, int priorDelta, double p_incl, double bb_a, double bb_b,
-                       int imom_method = 1) {
+                       int imom_method = 0) {
   MsProblem P;
   P.n = y.size(); P.K = x.ncol();
   arma::mat X(x.begin(), P.n, P.K, false, true);

@@ -11,16 +11,16 @@ and normal priors) should be run with CRAN mombf.
 
 | Function | Purpose |
 |---|---|
-| `bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 1)` | Gibbs sampler over the inclusion indicators of one unit's break columns. Same algorithm and output as `mombf::modelSelection(..., method = "ALA", phi = phi, enumerate = FALSE, initSearch = "none", center = FALSE, scale = FALSE)` for `momprior()` / `imomprior()` and `modelbinomprior()` / `modelbbprior()` (with `imom_method = 0` for the iMOM prior). Returns `postSample` (logical matrix) and `margpp`. |
+| `bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 0)` | Gibbs sampler over the inclusion indicators of one unit's break columns. Same algorithm and output as `mombf::modelSelection(..., method = "ALA", phi = phi, enumerate = FALSE, initSearch = "none", center = FALSE, scale = FALSE)` for `momprior()` / `imomprior()` and `modelbinomprior()` / `modelbbprior()` (with `imom_method = 0` for the iMOM prior). Returns `postSample` (logical matrix) and `margpp`. |
 | `bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit)` | Break-size draws from the MOM / iMOM posterior with known `phi`; returns the last of `niter` draws. Same algorithm as the earlier bespoke `rnlp_new(..., knownphi = TRUE, use_thinit = TRUE)`. |
-| `bisam_log_joint(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 1)` | Log integrated likelihood + log model prior of one model (diagnostics). |
+| `bisam_log_joint(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 0)` | Log integrated likelihood + log model prior of one model (diagnostics). |
 | `bisam_imom_mode(y, x, sel, tau, phi, method, start)` | iMOM posterior mode of one model: 0 = legacy mombf iteration, 1 = near-global, 2 = Newton from `start` (signs fixed), 3 = sign-switching descent from `start` (diagnostics). |
 | `bisam_imom_stats(reset)`, `bisam_set_imom_exhaustive_max(mmax, starts)` | Counters (calls and time of mode searches by model size) and tuning of the exhaustive search (diagnostics). |
 | `priorp2g`, `mode2g`, `pmom`, `qmom`, `pimom`, `qimom` | Prior elicitation helpers, verbatim from mombf. |
 
 Codes: `prior` 0 = product MOM (r = 1), 1 = product iMOM; `priorDelta` 1 = Bernoulli(`p_incl`),
-2 = Beta-Bernoulli(`bb_a`, `bb_b`); `imom_method` (iMOM only) 0 = ALA at the legacy mombf mode,
-1 = ALA at the near-global mode (default), 2 = Laplace at the near-global mode.
+2 = Beta-Bernoulli(`bb_a`, `bb_b`); `imom_method` (iMOM only) 0 = ALA at the legacy mombf mode (default),
+1 = ALA at the near-global mode, 2 = Laplace at the near-global mode.
 
 ## iMOM integrated likelihood and the posterior mode
 
@@ -37,8 +37,8 @@ the error of the log Bayes factor for adding one break was:
 
 | approximation | tau = 3.32: mean [sd] | tau = 17.3: mean [sd] |
 |---|---|---|
-| ALA at legacy mode (`imom_method = 0`) | -4.3 [6.7] | -18.2 [21.6] |
-| ALA at near-global mode (`1`, default) | -2.0 [0.44] | -2.1 [0.57] |
+| ALA at legacy mode (`imom_method = 0`, default) | -4.3 [6.7] | -18.2 [21.6] |
+| ALA at near-global mode (`1`) | -2.0 [0.44] | -2.1 [0.57] |
 | Laplace at near-global mode (`2`) | -0.11 [0.33] | -0.07 [0.28] |
 
 ALA's remaining bias (about -2 log-units per break, from the BIC-type term -0.5 log n per break)
@@ -56,7 +56,7 @@ need recalibration before switching.
   1e-5, max 50 sweeps), with the quartic root found by a bracketed Newton search warm-started at
   the coordinate's current value instead of building a `Polynomial` and running Jenkins-Traub at
   every update. Log integrated likelihoods agree with mombf to < 2e-5 (the solver tolerance).
-  The default (`imom_method = 1`) uses the near-global mode instead (see above).
+  `imom_method = 1, 2` use the near-global mode instead (see above); they are 1.5-3.5x slower.
 * Random numbers come from R's RNG (`set.seed()` works). mombf 3.5.4 drew the model-selection
   and break-size random numbers from an internal generator with fixed seeds.
 * Normal cdf/quantiles in the truncated-normal sampler use R's `pnorm`/`qnorm`.

@@ -13,11 +13,11 @@ bisam_imom_stats <- function(reset = FALSE) {
     .Call(`_mombf_bisam_imom_stats`, reset)
 }
 
-bisam_ms_gibbs <- function(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 1L) {
+bisam_ms_gibbs <- function(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 0L) {
     .Call(`_mombf_bisam_ms_gibbs`, y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method)
 }
 
-bisam_log_joint <- function(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 1L) {
+bisam_log_joint <- function(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 0L) {
     .Call(`_mombf_bisam_log_joint`, y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method)
 }
 
