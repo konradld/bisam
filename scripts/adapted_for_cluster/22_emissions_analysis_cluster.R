@@ -12,7 +12,7 @@ library(gets)
 library(getspanel)
 library(Matrix)
 library(ggplot2)
-library(mombf)
+library(bisamcore)
 
 
 # Settings ----------------------------------------------------------------

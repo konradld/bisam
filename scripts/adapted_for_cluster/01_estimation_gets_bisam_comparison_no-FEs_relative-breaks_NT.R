@@ -21,7 +21,7 @@ library(stringr)
 library(gets)
 library(getspanel)
 library(Matrix)
-library(mombf)
+library(bisamcore)
 library(glmnet)  # Added for adaptive Lasso
 
 config <- expand.grid(

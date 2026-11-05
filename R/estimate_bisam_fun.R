@@ -65,7 +65,7 @@ estimate_bisam <- function(
   library(Matrix)
   library(matrixStats)
   require(dplyr)
-  library(mombf)
+  library(bisamcore)
   library(glmnet)
   
   # ============================================================================
@@ -669,8 +669,8 @@ estimate_bisam <- function(
       }
       
       # Model selection: Gibbs sweeps over this unit's break indicators with ALA
-      # integrated likelihoods (compiled core of the bespoke mombf, known phi = 1)
-      w_i_mod <- mombf::bisam_ms_gibbs(
+      # integrated likelihoods (bisamcore, known phi = 1)
+      w_i_mod <- bisamcore::bisam_ms_gibbs(
         y = y_tmp_sd[n_idx],
         x = Z_std_j,
         prior = sis_prior_code,
@@ -717,7 +717,7 @@ estimate_bisam <- function(
         
         # Non-local posterior draw of the selected break sizes (known phi), started at
         # the last non-zero draw of each break
-        g_draw[colsel] <- mombf::bisam_rnlp(
+        g_draw[colsel] <- bisamcore::bisam_rnlp(
           y = as.vector(y_rnlp),
           x = z_rnlp,
           prior = sis_prior_code,

@@ -1,11 +1,17 @@
-# mombf (bespoke BISAM build, based on mombf 3.5.4)
+# bisamcore
 
-A stripped-down version of [mombf](https://github.com/davidrusi/mombf) 3.5.4 (David Rossell
-et al., GPL >= 2) that contains only what `R/estimate_bisam_fun.R` needs. The package keeps
-the name `mombf` so that the BISAM scripts (`library(mombf)`, `priorp2g()`) work unchanged.
-**Installing it replaces any CRAN mombf in the same library.** Scripts that need the full
-package (e.g. `scripts/16_prior_comparison_rates.R`, which calls `nlpMarginal()` with Zellner
-and normal priors) should be run with CRAN mombf.
+The compiled core of `estimate_bisam()` (`R/estimate_bisam_fun.R`). It is **derived from
+[mombf](https://github.com/davidrusi/mombf) 3.5.4** (David Rossell et al., GPL >= 2), but it is
+not a version of mombf: only the parts BISAM needs were kept, they were re-implemented for
+speed, and some were extended (near-global iMOM posterior mode, R's RNG). See "Differences to
+mombf 3.5.4" below.
+
+Install with `source("inst/install_bisamcore.R")` from the repository root. bisamcore does not
+conflict with CRAN mombf; scripts that need the full mombf (e.g.
+`scripts/16_prior_comparison_rates.R`, which calls `nlpMarginal()` with Zellner and normal
+priors) load CRAN mombf, which can be installed alongside. Earlier versions of this repository
+installed this code under the name `mombf` (version 3.5.4.9000); the install script removes
+that build if present.
 
 ## Contents
 

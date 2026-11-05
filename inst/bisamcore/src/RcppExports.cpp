@@ -13,7 +13,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 // bisam_set_imom_exhaustive_max
 int bisam_set_imom_exhaustive_max(int mmax, int starts);
-RcppExport SEXP _mombf_bisam_set_imom_exhaustive_max(SEXP mmaxSEXP, SEXP startsSEXP) {
+RcppExport SEXP _bisamcore_bisam_set_imom_exhaustive_max(SEXP mmaxSEXP, SEXP startsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -25,7 +25,7 @@ END_RCPP
 }
 // bisam_imom_mode
 List bisam_imom_mode(NumericVector y, NumericMatrix x, IntegerVector sel, double tau, double phi, int method, NumericVector start);
-RcppExport SEXP _mombf_bisam_imom_mode(SEXP ySEXP, SEXP xSEXP, SEXP selSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP methodSEXP, SEXP startSEXP) {
+RcppExport SEXP _bisamcore_bisam_imom_mode(SEXP ySEXP, SEXP xSEXP, SEXP selSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP methodSEXP, SEXP startSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -42,7 +42,7 @@ END_RCPP
 }
 // bisam_imom_stats
 DataFrame bisam_imom_stats(bool reset);
-RcppExport SEXP _mombf_bisam_imom_stats(SEXP resetSEXP) {
+RcppExport SEXP _bisamcore_bisam_imom_stats(SEXP resetSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -53,7 +53,7 @@ END_RCPP
 }
 // bisam_ms_gibbs
 List bisam_ms_gibbs(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int priorDelta, double p_incl, double bb_a, double bb_b, int niter, int burnin, LogicalVector deltaini, int imom_method);
-RcppExport SEXP _mombf_bisam_ms_gibbs(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP deltainiSEXP, SEXP imom_methodSEXP) {
+RcppExport SEXP _bisamcore_bisam_ms_gibbs(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP deltainiSEXP, SEXP imom_methodSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -76,7 +76,7 @@ END_RCPP
 }
 // bisam_log_joint
 double bisam_log_joint(NumericVector y, NumericMatrix x, IntegerVector sel, int prior, double tau, double phi, int priorDelta, double p_incl, double bb_a, double bb_b, int imom_method);
-RcppExport SEXP _mombf_bisam_log_joint(SEXP ySEXP, SEXP xSEXP, SEXP selSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP, SEXP imom_methodSEXP) {
+RcppExport SEXP _bisamcore_bisam_log_joint(SEXP ySEXP, SEXP xSEXP, SEXP selSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP priorDeltaSEXP, SEXP p_inclSEXP, SEXP bb_aSEXP, SEXP bb_bSEXP, SEXP imom_methodSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -97,7 +97,7 @@ END_RCPP
 }
 // bisam_rnlp
 NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int niter, int burnin, NumericVector thinit);
-RcppExport SEXP _mombf_bisam_rnlp(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP thinitSEXP) {
+RcppExport SEXP _bisamcore_bisam_rnlp(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP thinitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -115,16 +115,16 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_mombf_bisam_set_imom_exhaustive_max", (DL_FUNC) &_mombf_bisam_set_imom_exhaustive_max, 2},
-    {"_mombf_bisam_imom_mode", (DL_FUNC) &_mombf_bisam_imom_mode, 7},
-    {"_mombf_bisam_imom_stats", (DL_FUNC) &_mombf_bisam_imom_stats, 1},
-    {"_mombf_bisam_ms_gibbs", (DL_FUNC) &_mombf_bisam_ms_gibbs, 13},
-    {"_mombf_bisam_log_joint", (DL_FUNC) &_mombf_bisam_log_joint, 11},
-    {"_mombf_bisam_rnlp", (DL_FUNC) &_mombf_bisam_rnlp, 8},
+    {"_bisamcore_bisam_set_imom_exhaustive_max", (DL_FUNC) &_bisamcore_bisam_set_imom_exhaustive_max, 2},
+    {"_bisamcore_bisam_imom_mode", (DL_FUNC) &_bisamcore_bisam_imom_mode, 7},
+    {"_bisamcore_bisam_imom_stats", (DL_FUNC) &_bisamcore_bisam_imom_stats, 1},
+    {"_bisamcore_bisam_ms_gibbs", (DL_FUNC) &_bisamcore_bisam_ms_gibbs, 13},
+    {"_bisamcore_bisam_log_joint", (DL_FUNC) &_bisamcore_bisam_log_joint, 11},
+    {"_bisamcore_bisam_rnlp", (DL_FUNC) &_bisamcore_bisam_rnlp, 8},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_mombf(DllInfo *dll) {
+RcppExport void R_init_bisamcore(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

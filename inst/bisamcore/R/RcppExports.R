@@ -2,26 +2,26 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 bisam_set_imom_exhaustive_max <- function(mmax, starts = -1L) {
-    .Call(`_mombf_bisam_set_imom_exhaustive_max`, mmax, starts)
+    .Call(`_bisamcore_bisam_set_imom_exhaustive_max`, mmax, starts)
 }
 
 bisam_imom_mode <- function(y, x, sel, tau, phi, method, start) {
-    .Call(`_mombf_bisam_imom_mode`, y, x, sel, tau, phi, method, start)
+    .Call(`_bisamcore_bisam_imom_mode`, y, x, sel, tau, phi, method, start)
 }
 
 bisam_imom_stats <- function(reset = FALSE) {
-    .Call(`_mombf_bisam_imom_stats`, reset)
+    .Call(`_bisamcore_bisam_imom_stats`, reset)
 }
 
 bisam_ms_gibbs <- function(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 0L) {
-    .Call(`_mombf_bisam_ms_gibbs`, y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method)
+    .Call(`_bisamcore_bisam_ms_gibbs`, y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method)
 }
 
 bisam_log_joint <- function(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 0L) {
-    .Call(`_mombf_bisam_log_joint`, y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method)
+    .Call(`_bisamcore_bisam_log_joint`, y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method)
 }
 
 bisam_rnlp <- function(y, x, prior, tau, phi, niter, burnin, thinit) {
-    .Call(`_mombf_bisam_rnlp`, y, x, prior, tau, phi, niter, burnin, thinit)
+    .Call(`_bisamcore_bisam_rnlp`, y, x, prior, tau, phi, niter, burnin, thinit)
 }
 

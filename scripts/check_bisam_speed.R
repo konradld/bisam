@@ -1,22 +1,21 @@
 # ==============================================================================
-# Quick check that the fast bespoke mombf is installed and used, and how long
+# Quick check that bisamcore is installed and used, and how long
 # estimate_bisam() itself takes (without GETS or anything else).
 # Run from the repository root:  Rscript scripts/check_bisam_speed.R
 # Reference for exactly this setup (Linux, R 4.3, reference BLAS):
-#   original mombf 3.5.4-based code: ~59 s;  current code: ~4 s.
-# If you see times close to the first number, an old package or an old copy of
-# estimate_bisam_fun.R is being used (restart R after reinstalling the package).
+#   original mombf 3.5.4-based code: ~59 s;  current code (bisamcore): ~4 s.
+# If you see times close to the first number, an old copy of estimate_bisam_fun.R or of
+# the package is being used (restart R after reinstalling the package).
 # ==============================================================================
 rm(list = ls())
-suppressMessages(library(mombf))
-cat("mombf version:", as.character(packageVersion("mombf")), "\n")
-cat("loaded from:  ", find.package("mombf"), "\n")
-if (!exists("bisam_ms_gibbs", where = asNamespace("mombf"))) {
-  stop("The loaded mombf is not the bespoke BISAM build. Reinstall it with ",
-       "source('inst/install_bespoke_mombf_3.5.4.R') and restart R.")
+if (!requireNamespace("bisamcore", quietly = TRUE)) {
+  stop("bisamcore is not installed. Install it with source('inst/install_bisamcore.R') and restart R.")
 }
-if (!"imom_method" %in% names(formals(mombf::bisam_ms_gibbs))) {
-  warning("The installed bespoke mombf is older than this repository. Reinstall it and restart R.")
+suppressMessages(library(bisamcore))
+cat("bisamcore version:", as.character(packageVersion("bisamcore")), "\n")
+cat("loaded from:      ", find.package("bisamcore"), "\n")
+if (as.character(packageVersion("bisamcore")) != read.dcf("inst/bisamcore/DESCRIPTION", "Version")[1]) {
+  warning("The installed bisamcore differs from the version in this repository. Reinstall it and restart R.")
 }
 
 source("./R/contr_sim_breaks_fun.R")

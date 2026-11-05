@@ -25,7 +25,7 @@ library(stringr)
 library(gets)
 library(getspanel)
 library(Matrix)
-library(mombf)
+library(bisamcore)
 
 config <- list(
   ssvs_settings = data.frame(

@@ -1,4 +1,4 @@
-// Lean BISAM core: the only compiled code BISAM needs (bespoke, stripped-down mombf).
+// bisamcore: the compiled core of BISAM (derived from mombf 3.5.4, D. Rossell et al., GPL >= 2).
 //
 //  * bisam_ms_gibbs(): Gibbs sampler over the break-inclusion indicators of one unit,
 //    Gaussian errors with KNOWN residual variance phi, product MOM (r = 1) or product

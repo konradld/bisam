@@ -18,7 +18,7 @@ if(is_slurm) {
 }
 
 library(Matrix)
-library(mombf)
+library(bisamcore)
 
 config <- expand.grid(
   sis_prior = c("imom"),

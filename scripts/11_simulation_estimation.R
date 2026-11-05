@@ -23,7 +23,7 @@ library(stringr)
 library(gets)
 library(getspanel)
 library(Matrix)
-library(mombf)
+library(bisamcore)
 library(glmnet)
 
 if(FIGURE == 2 || FIGURE == 3) {

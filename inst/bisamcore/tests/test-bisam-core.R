@@ -1,5 +1,5 @@
 # Basic checks of the BISAM core (run with: Rscript tests/test-bisam-core.R)
-library(mombf)
+library(bisamcore)
 set.seed(1)
 t <- 30
 z <- lower.tri(matrix(1, t, t), diag = TRUE)[, -c(1:2, t)] * 1.0

@@ -18,7 +18,7 @@ rm(list = ls())
 # ==============================================================================
 
 library(dplyr)
-library(mombf)
+library(bisamcore)
 
 config <- list(
   ssvs_settings = expand.grid(

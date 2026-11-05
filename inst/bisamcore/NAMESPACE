@@ -1,4 +1,4 @@
-useDynLib(mombf, .registration = TRUE)
+useDynLib(bisamcore, .registration = TRUE)
 importFrom(Rcpp, evalCpp)
 importFrom(stats, nlminb, pgamma, pnorm, qgamma)
 
