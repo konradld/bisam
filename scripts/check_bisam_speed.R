@@ -1,25 +1,23 @@
 # ==============================================================================
-# Quick check that bisamcore is installed and used, and how long
+# Quick check that the installed bisam package is current, and how long
 # estimate_bisam() itself takes (without GETS or anything else).
 # Run from the repository root:  Rscript scripts/check_bisam_speed.R
 # Reference for exactly this setup (Linux, R 4.3, reference BLAS):
-#   original mombf 3.5.4-based code: ~59 s;  current code (bisamcore): ~4 s.
-# If you see times close to the first number, an old copy of estimate_bisam_fun.R or of
-# the package is being used (restart R after reinstalling the package).
+#   original mombf 3.5.4-based code: ~59 s;  current code: ~4 s.
+# If you see times close to the first number, an old version is being used
+# (reinstall the package and restart R).
 # ==============================================================================
 rm(list = ls())
-if (!requireNamespace("bisamcore", quietly = TRUE)) {
-  stop("bisamcore is not installed. Install it with source('inst/install_bisamcore.R') and restart R.")
+if (!requireNamespace("bisam", quietly = TRUE)) {
+  stop("bisam is not installed. From the repository root run: remotes::install_local('.')")
 }
-suppressMessages(library(bisamcore))
-cat("bisamcore version:", as.character(packageVersion("bisamcore")), "\n")
-cat("loaded from:      ", find.package("bisamcore"), "\n")
-if (as.character(packageVersion("bisamcore")) != read.dcf("inst/bisamcore/DESCRIPTION", "Version")[1]) {
-  warning("The installed bisamcore differs from the version in this repository. Reinstall it and restart R.")
+suppressMessages(library(bisam))
+cat("bisam version:", as.character(packageVersion("bisam")), "\n")
+cat("loaded from:  ", find.package("bisam"), "\n")
+if (file.exists("DESCRIPTION") &&
+    as.character(packageVersion("bisam")) != read.dcf("DESCRIPTION", "Version")[1]) {
+  warning("The installed bisam differs from the version in this repository. Reinstall it and restart R.")
 }
-
-source("./R/contr_sim_breaks_fun.R")
-source("./R/estimate_bisam_fun.R")
 
 set.seed(1)
 Ni <- 10; Nt <- 30; N_STEPS <- 1:4

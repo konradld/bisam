@@ -1,0 +1,21 @@
+Package: bisam
+Type: Package
+Title: Bayesian Indicator Saturated Models for Structural Breaks in Panel Data
+Version: 0.2.0
+Date: 2026-11-05
+Authors@R: person("Lucas D.", "Konrad", email = "lucas.konrad@wu.ac.at", role = c("aut", "cre"))
+Description: Bayesian detection of structural breaks (step shifts) and outliers in panel data
+    via indicator saturation with non-local (MOM / iMOM) priors on the break sizes. Break
+    indicators are sampled with integrated likelihoods and break sizes from their non-local
+    posterior. The compiled core is derived from the 'mombf' package 3.5.4 (Rossell et al.)
+    and was re-implemented and extended for this model.
+License: GPL (>= 2)
+URL: https://github.com/konradld/bisam
+Depends: R (>= 4.1.0)
+Imports: Rcpp (>= 1.0.0), Matrix, matrixStats, methods, mvtnorm, stats, stringr, utils
+Suggests: glmnet, stochvol, testthat (>= 3.0.0)
+LinkingTo: Rcpp, RcppArmadillo
+Encoding: UTF-8
+NeedsCompilation: yes
+Config/testthat/edition: 3
+RoxygenNote: 7.3.1

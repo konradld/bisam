@@ -1,4 +1,32 @@
-# _________________ Controlled Simulation ______________----
+#' Simulate panel data with step shifts and outliers
+#'
+#' Generates a balanced panel \code{y = X b + outliers + Z g + e} with unit-specific step
+#' shifts (\code{Z} holds the step dummies used by \code{\link{estimate_bisam}}) and
+#' observation-level outliers at given positions.
+#'
+#' @param n Number of units.
+#' @param t Number of time periods.
+#' @param nx Number of covariates (standard Normal, coefficients drawn from -10:10).
+#' @param iis,sis Kept for compatibility (outliers and steps are set by \code{pos.outl},
+#'   \code{pos.step}).
+#' @param pos.outl Positions of outliers in the stacked panel (unit-major order), or 0.
+#' @param pos.step Positions of step shifts in the stacked panel (unit-major order).
+#' @param const,ife,tfe Include a constant, unit fixed effects and/or time fixed effects
+#'   (coefficients drawn from -10:10). With both fixed effects and no constant the first unit
+#'   effect is dropped.
+#' @param outl.mean Size of the outliers.
+#' @param step.mean Size of the step shifts.
+#' @param error.sd Standard deviation of the Normal errors.
+#' @return A list with \code{data} (matrix with columns n, t, y and covariates), the true
+#'   coefficients (\code{true.b}, \code{true.const}, \code{true.ife}, \code{true.tfe}), the
+#'   errors and \code{tr.idx} (size, position and relative net effect of each outlier and step).
+#' @examples
+#' set.seed(1)
+#' sim <- contr_sim_breaks(n = 3, t = 20, nx = 1, iis = FALSE, sis = TRUE, const = TRUE,
+#'                         pos.outl = 0, pos.step = 10, outl.mean = 0, step.mean = 3,
+#'                         error.sd = 1)
+#' head(sim$data)
+#' @export
 contr_sim_breaks <- function(
     n,
     t,
@@ -14,15 +42,13 @@ contr_sim_breaks <- function(
     step.mean,
     error.sd){
   
-  require(mvtnorm)
-  
   # Create individual and time indicators
   n_<- c(t(matrix(rep(1:n,t), ncol = rep(t,n)))) # unit index
   t_<- c(matrix(rep(1:t,n), ncol = n)) # time index
   
   # Create obs. matrices and corresponding betas
   if(nx > 0){
-    X_ <- rmvnorm(n*t,rep(0,nx),diag(nx))
+    X_ <- mvtnorm::rmvnorm(n*t,rep(0,nx),diag(nx))
     X  <- X_ # original version will be required later
 
     b_ <- sample(x = -10:10,size = nx,replace = T)
@@ -55,8 +81,12 @@ contr_sim_breaks <- function(
   }
   if(tfe & ife & !const) {
     warning("Both time and unit fixed effects used.\n Dropping first indiv. FE dummy to avoid perfect colinearity")
-    X <- X[, -(ncol(X_)+1)]
-    b <- b[-(ncol(X_)+1)]
+    # first unit dummy sits right after the covariates (ncol(NULL) is NULL when nx = 0, which
+    # previously dropped all fixed-effect columns)
+    first_ife <- (if (is.null(X_)) 0 else ncol(X_)) + 1
+    X <- X[, -first_ife]
+    b <- b[-first_ife]
+    bife <- bife[-1]
   }
   # IIS
   I <- diag(n*t)

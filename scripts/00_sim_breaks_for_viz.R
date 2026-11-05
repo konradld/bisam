@@ -55,8 +55,12 @@ contr_sim_breaks <- function(
   }
   if(tfe & ife & !const) {
     warning("Both time and unit fixed effects used.\n Dropping first indiv. FE dummy to avoid perfect colinearity")
-    X <- X[, -(ncol(X_)+1)]
-    b <- b[-(ncol(X_)+1)]
+    # first unit dummy sits right after the covariates (ncol(NULL) is NULL when nx = 0, which
+    # previously dropped all fixed-effect columns)
+    first_ife <- (if (is.null(X_)) 0 else ncol(X_)) + 1
+    X <- X[, -first_ife]
+    b <- b[-first_ife]
+    bife <- bife[-1]
   }
   # IIS
   I <- diag(n*t)

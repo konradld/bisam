@@ -18,7 +18,7 @@ rm(list = ls())
 # ==============================================================================
 
 library(dplyr)
-library(bisamcore)
+library(bisam)
 
 config <- list(
   ssvs_settings = expand.grid(
@@ -132,7 +132,7 @@ add_break_shading_gradient <- function(breaks_to_shade,
 # ==============================================================================
 
 library(stringr)
-source("./R/pip_window_fun.R")
+library(bisam)
 
 # Load sector-specific results
 mod <- bisam_results

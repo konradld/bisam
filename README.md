@@ -1,64 +1,63 @@
-# BISAM: Estimating Bayesian Indicator Saturated Models
+# bisam: Bayesian Indicator Saturated Models
 
-This repository contains R functions for Bayesian structural break detection and analysis, with comparison tools for evaluating performance against Gets (General-to-Specific) estimation.
-
-## Overview
-
-BISAM provides a Bayesian approach to detecting structural breaks in time series data using Bayesian model averaging and selection. The methodology uses Posterior Inclusion Probabilities (PIPs) to identify step-breaks and outliers and select break points based on configurable thresholds.
-
-## Repository Structure
-
-### Core Functions
-
-- **`estimate_bisam_fun.R`**  
-  Main estimation function for Bayesian structural break analysis. This is the key function of the repository.
-
-- **`pip_window_fun.R`**  
-  Calculates Joint Posterior Inclusion Probabilities (PIPs) and selects break points according to a specified threshold.
-
-- **`contr_sim_breaks_fun.R`**  
-  Data simulation function that generates panel data with structural breaks and outliers of specified sizes and location.
-
-### Installation
-
-- **`inst/install_bisamcore.R`**  
-  Installs `bisamcore` (in `inst/bisamcore/`), the compiled core required by `estimate_bisam_fun.R`: break-indicator Gibbs sampler with a fast iMOM posterior-mode solver, non-local break-size draws, and `priorp2g()`. It is derived from the `mombf` package (version 3.5.4, D. Rossell et al.) but is not a version of it; see `inst/bisamcore/README.md`. It must be installed before using `estimate_bisam_fun.R`. It does not conflict with CRAN `mombf`, which scripts needing the full package (such as `scripts/16_prior_comparison_rates.R`) use.
-
-### Examples and Simulations
-
-- **`00_bisam_simulation.R`**  
-  Example script demonstrating the basic workflow: data generation using `contr_sim_breaks_fun.R` and estimation using `estimate_bisam_fun.R`.
-
-- **`01_estimation_gets_bisam_comparison.R`**  
-  Simulation study comparing BISAM performance against Gets (General-to-Specific) estimation.
-
-- **`02_analysis_gets_bisam_comparison.R`**  
-  Analysis and visualization of results from the output of `01_estimation_gets_bisam_comparison.R`.
+R package for Bayesian detection of structural breaks (step shifts) and outliers in panel
+data. Break indicators are sampled with non-local (MOM / iMOM) priors on the break sizes;
+posterior inclusion probabilities (PIPs) identify breaks, optionally aggregated over time
+windows. The repository also contains the scripts for the simulation study (including a
+comparison with GETS indicator saturation) and the emissions application.
 
 ## Installation
 
-1. Clone this repository:
+From GitHub:
+
 ```r
-# In your terminal
-git clone https://github.com/konradld/bisam.git
-cd bisam
+# install.packages("remotes")
+remotes::install_github("konradld/bisam", ref = "dev_speedup")
 ```
 
-2. Install the bisamcore package:
+or from a local clone (run in the repository root):
+
 ```r
-source("inst/install_bisamcore.R")
+remotes::install_local(".", force = TRUE)
 ```
 
-3. Load required functions:
+The package contains C++ code, so a compiler is needed (on Windows: Rtools). Restart R after
+reinstalling. `scripts/check_bisam_speed.R` checks that the installed version matches the
+repository and times `estimate_bisam()`.
+
+Earlier versions of this repository installed the compiled core as a separate package
+(`mombf` 3.5.4.9000, later `bisamcore`); these are no longer needed and can be removed with
+`remove.packages(c("bisamcore"))`. A CRAN `mombf` is unaffected (and is still used by
+`scripts/16_prior_comparison_rates.R`).
+
+## Usage
+
 ```r
-source("estimate_bisam_fun.R")
-source("pip_window_fun.R")
-source("contr_sim_breaks_fun.R")
+library(bisam)
+set.seed(1)
+sim <- contr_sim_breaks(n = 10, t = 30, nx = 0, iis = FALSE, sis = TRUE, const = TRUE,
+                        pos.outl = 0, pos.step = c(43, 108), outl.mean = 0,
+                        step.mean = 3, error.sd = 1)
+fit <- estimate_bisam(sim$data, do_constant = TRUE, Ndraw = 5000, Nburn = 1000,
+                      beta_prior = "f", step_size_prior = "imom", step_incl_prior = "bern",
+                      step_size_scale = priorp2g(0.01, 1, prior = "iMom"))
+breaks <- pip_window(fit, win_size = 1, op = ">=", pip_threshold = 0.5)
 ```
 
-## Quick Start
+See `?estimate_bisam`, `?pip_window`, `?contr_sim_breaks` and `?priorp2g`.
 
-See the example simulation for a complete workflow in **`00_bisam_simulation.R`**
+## Repository structure
+
+| Path | Content |
+|---|---|
+| `R/`, `src/`, `man/`, `tests/`, `DESCRIPTION`, `NAMESPACE` | The `bisam` package. |
+| `inst/IMPLEMENTATION.md` | Notes on the compiled core: what it took from mombf 3.5.4, what changed, and how it was validated. |
+| `scripts/` | Simulation study (`00_`-`17_`), emissions application (`21_`, `22_`) and cluster versions (`adapted_for_cluster/`). Not part of the package. |
+| `data/` | Emissions data used by the application scripts. |
+| `output/` | Results of the simulation study and the application. |
+
+The compiled core is derived from [mombf](https://github.com/davidrusi/mombf) 3.5.4
+(D. Rossell et al.), hence the GPL (>= 2) licence.
 
 ## References
 

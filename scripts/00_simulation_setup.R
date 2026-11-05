@@ -3,7 +3,7 @@
 # ==============================================================================
 
 rm(list = ls())
-library(bisamcore)
+library(bisam)
 
 set.seed(12345)
 
@@ -186,7 +186,7 @@ DO_GEWEKE_TEST <- FALSE
 # RUN MODEL
 # ==============================================================================
 
-source("./R/estimate_bisam_fun.R")
+library(bisam)
 
 data = data
 do_constant = DO_CONST

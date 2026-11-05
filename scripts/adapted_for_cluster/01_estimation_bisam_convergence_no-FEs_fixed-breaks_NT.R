@@ -18,7 +18,7 @@ if(is_slurm) {
 }
 
 library(Matrix)
-library(bisamcore)
+library(bisam)
 
 config <- expand.grid(
   sis_prior = c("imom"),
@@ -97,9 +97,7 @@ S2_TRUE <- ERROR_SD^2
 # DATA SIMULATION
 # ==============================================================================
 
-source("./R/contr_sim_breaks_fun.R")
-source("./R/estimate_bisam_fun.R")
-source("./R/pip_window_fun.R")
+library(bisam)
 
 sim <- contr_sim_breaks(
   n = Ni, 

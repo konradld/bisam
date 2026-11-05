@@ -3,7 +3,9 @@
 .RData
 .Ruserdata
 .positai
-# compiled objects of bisamcore
-inst/bisamcore/src/*.o
-inst/bisamcore/src/*.so
-inst/bisamcore/src/*.dll
+# compiled objects and package check output
+src/*.o
+src/*.so
+src/*.dll
+*.Rcheck/
+bisam_*.tar.gz

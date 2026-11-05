@@ -1,3 +1,88 @@
+#' Estimate a Bayesian indicator saturated model (BISAM)
+#'
+#' Gibbs sampler for a panel regression with unit-specific step shifts (structural breaks)
+#' and, optionally, outliers. Break indicators are sampled with non-local (MOM / iMOM) priors on
+#' the break sizes, using integrated likelihoods with the break sizes integrated out; break
+#' sizes are then drawn from their non-local posterior (Rossell and Telesca, 2017).
+#'
+#' The data must be sorted by unit and, within unit, by time (a balanced panel).
+#'
+#' @param data Data frame or matrix with unit index, time index, response and covariates.
+#' @param do_constant,do_individual_fe,do_time_fe Include a constant, unit fixed effects and/or
+#'   time fixed effects. With both fixed effects and no constant the first unit effect is dropped.
+#' @param y_index,i_index,t_index Column positions of the response, unit and time index.
+#' @param do_center_y,do_scale_y,do_center_x,do_scale_x Centre/scale the response and covariates.
+#' @param Ndraw Total number of Gibbs iterations (including burn-in).
+#' @param Nburn Number of burn-in iterations (must be smaller than \code{Ndraw}).
+#' @param beta_prior Prior for the regression coefficients: \code{"g"} (Zellner's g-prior),
+#'   \code{"f"} (fractional prior centred at a robust OLS fit), \code{"f_indep"} (fractional mean
+#'   with independent variances) or \code{"flasso"} (centred at a LASSO fit; needs \pkg{glmnet}).
+#' @param step_size_prior Non-local prior on the break sizes: \code{"mom"} (product MOM) or
+#'   \code{"imom"} (product iMOM).
+#' @param imom_marginal Integrated likelihood for the iMOM prior in the break-indicator step:
+#'   \code{"ala_legacy"} (default; approximate Laplace approximation at the posterior mode found
+#'   by mombf's coordinate iteration, as in mombf 3.5.4), \code{"ala"} (the same at a
+#'   near-global posterior mode; more accurate, 1.5-3.5 times slower) or \code{"laplace"}
+#'   (Laplace approximation with the Hessian at the near-global mode). Ignored for MOM.
+#' @param rnlp_iter Number of Gibbs iterations used to draw a unit's break sizes after its set
+#'   of breaks changed (otherwise one iteration is used); see Details.
+#' @param step_incl_prior Prior on the break indicators: \code{"bern"} (Bernoulli with
+#'   probability \code{step_incl_prob}) or \code{"beta_bern"} (Beta-Bernoulli with parameters
+#'   \code{step_incl_alpha}, \code{step_incl_beta}).
+#' @param beta_variance_scale Variance scaling of the coefficient prior (g in the g-prior).
+#' @param sigma2_shape,sigma2_rate Inverse gamma prior on the residual variance. If either is
+#'   \code{NULL}, a data-based prior is used with shape 3 and P(sigma^2 <= robust OLS
+#'   variance) = \code{sigma2_hyper_p}.
+#' @param sigma2_hyper_p See \code{sigma2_shape}.
+#' @param step_incl_prob,step_incl_alpha,step_incl_beta Parameters of the inclusion prior.
+#' @param step_size_scale Dispersion tau of the MOM / iMOM prior, relative to the residual
+#'   variance (see \code{\link{priorp2g}} to elicit it).
+#' @param cred_int Coverage of the reported credible intervals.
+#' @param do_split_Z Sample the break indicators unit by unit (recommended).
+#' @param do_cluster_s2 Unit-specific residual variances.
+#' @param do_sv Stochastic volatility: an AR(1) log-variance process per unit (overrides
+#'   \code{do_cluster_s2}); needs at least 20 time periods.
+#' @param sv_prior_mu_mean,sv_prior_mu_var Normal prior on the SV level (default mean: log OLS
+#'   residual variance per unit).
+#' @param sv_prior_phi_a,sv_prior_phi_b Beta prior on (phi + 1) / 2 for the SV persistence.
+#' @param sv_prior_sigma_shape,sv_prior_sigma_rate Prior on the SV innovation variance.
+#' @param sv_backend \code{"internal"} (KSC mixture with FFBS) or \code{"stochvol"} (uses the
+#'   \pkg{stochvol} package).
+#' @param do_check_outlier Also sample observation-level outlier indicators.
+#' @param outlier_prior Outlier component: \code{"imom"} or \code{"norm"}.
+#' @param outlier_incl_alpha,outlier_incl_beta Beta prior on the outlier probability.
+#' @param outlier_scale Scale of the outlier component relative to the residual variance.
+#' @param steps_to_check \code{"all"} or the indices of the break columns to consider.
+#' @param do_sparse_computation Use sparse matrices for the design (slower for small panels).
+#' @param do_geweke_test Fixed prior settings for a Geweke-type check (constant variance only).
+#'
+#' @details
+#' The break indicators are drawn with the break sizes integrated out, so the sizes kept
+#' afterwards must be a draw from their conditional posterior given the selected breaks. If a
+#' unit's set of breaks did not change, its previous sizes already are such a draw and one Gibbs
+#' iteration is used; otherwise \code{rnlp_iter} iterations are run, with newly included breaks
+#' starting at the maximiser of their conditional posterior.
+#'
+#' @return An object of class \code{"ism"}: a list with posterior draws (\code{draws}: beta,
+#'   sigma2, sis = break sizes, omega = break indicators, iis = outlier indicators), the data
+#'   and design matrices (\code{data}), fitted values, posterior means (\code{coefs}), a
+#'   summary table with means, credible intervals and PIPs (\code{coef_list}), R-squared values
+#'   and run information (\code{meta}); with \code{do_sv = TRUE} also SV draws and the posterior
+#'   mean variance path.
+#'
+#' @references Rossell, D. and Telesca, D. (2017). Nonlocal priors for high-dimensional
+#'   estimation. Journal of the American Statistical Association, 112, 254-265.
+#' @seealso \code{\link{pip_window}}, \code{\link{contr_sim_breaks}}, \code{\link{priorp2g}}
+#' @examples
+#' set.seed(1)
+#' sim <- contr_sim_breaks(n = 3, t = 20, nx = 0, iis = FALSE, sis = TRUE, const = TRUE,
+#'                         pos.outl = 0, pos.step = 10, outl.mean = 0, step.mean = 3,
+#'                         error.sd = 1)
+#' fit <- estimate_bisam(sim$data, do_constant = TRUE, Ndraw = 500, Nburn = 100,
+#'                       beta_prior = "f", step_size_prior = "imom", step_incl_prior = "bern",
+#'                       step_size_scale = priorp2g(0.01, 1, prior = "iMom"))
+#' head(sort(fit$coefs$omega, decreasing = TRUE))
+#' @export
 estimate_bisam <- function(
     data,
     do_constant = FALSE,
@@ -51,23 +136,12 @@ estimate_bisam <- function(
   # GEWEKE DIAGNOSTIC MODE SETUP
   # ============================================================================
   if (do_geweke_test) {
-    library(extraDistr)
     beta_variance_scale <- 1.234
     Ndraw <- 100000
     sigma2_shape <- 3
     sigma2_rate <- 1
     beta_prior <- "g"
   }
-  
-  # ============================================================================
-  # REQUIRED PACKAGES
-  # ============================================================================
-  require(mvtnorm)
-  library(Matrix)
-  library(matrixStats)
-  require(dplyr)
-  library(bisamcore)
-  library(glmnet)
   
   # ============================================================================
   # INITIAL SETUP
@@ -99,7 +173,6 @@ estimate_bisam <- function(
   # ============================================================================
   # BUILD DESIGN MATRIX X
   # ============================================================================
-  if (do_sparse_computation) library(Matrix); library(RcppEigen)
   orig_p <- ncol(X) # save original nr. of columns
   
   # Add constant if requested
@@ -254,9 +327,12 @@ estimate_bisam <- function(
     }
   }
   if (beta_prior == "flasso") {
-    lasso_model <- glmnet(X, y, alpha = 1, intercept = FALSE)
-    best_lambda <- cv.glmnet(X, y, alpha = 1)$lambda.min
-    beta_mean <- as.array(coef(lasso_model, s = best_lambda))[-1]
+    if (!requireNamespace("glmnet", quietly = TRUE)) {
+      stop("beta_prior = 'flasso' requires the 'glmnet' package. Install it with install.packages('glmnet').")
+    }
+    lasso_model <- glmnet::glmnet(X, y, alpha = 1, intercept = FALSE)
+    best_lambda <- glmnet::cv.glmnet(X, y, alpha = 1)$lambda.min
+    beta_mean <- as.array(stats::coef(lasso_model, s = best_lambda))[-1]
   }
   # beta_var_inv <- XX / beta_variance_scale
   
@@ -680,8 +756,8 @@ estimate_bisam <- function(
       }
       
       # Model selection: Gibbs sweeps over this unit's break indicators with ALA
-      # integrated likelihoods (bisamcore, known phi = 1)
-      w_i_mod <- bisamcore::bisam_ms_gibbs(
+      # integrated likelihoods (compiled core, known phi = 1)
+      w_i_mod <- bisam_ms_gibbs(
         y = y_tmp_sd[n_idx],
         x = Z_std_j,
         prior = sis_prior_code,
@@ -733,7 +809,7 @@ estimate_bisam <- function(
         is_new <- g_prev == 0                       # break just entered (was excluded)
         set_changed <- any((g_i[p_idx_full] != 0) != w_i[p_idx_full])  # a break entered or left
         n_rnlp <- if (set_changed) rnlp_iter else 1L
-        g_draw[colsel] <- bisamcore::bisam_rnlp(
+        g_draw[colsel] <- bisam_rnlp(
           y = as.vector(y_rnlp),
           x = z_rnlp,
           prior = sis_prior_code,
@@ -889,35 +965,14 @@ estimate_bisam <- function(
 #===============================================================================
 # Single quantile constraint: P(X <= x) = p
 inv_gamma_params <- function(shape = 3, x, p = 0.9) {
-  require(invgamma)
-  # Solve for scale such that P(X <= x) = p
-  result <- uniroot(
-    # \propto x^(-shape-1) exp(-rate/x) == 1/gamma(shape,rate)
-    function(b) invgamma::pinvgamma(x, shape = shape, scale = b) - p,
+  # Solve for the scale b of an inverse gamma with P(X <= x) = p. Same root-finding problem as
+  # the earlier invgamma::pinvgamma(x, shape, scale = b) version: invgamma defines
+  # pinvgamma(q, shape, scale = b) = pgamma(1/q, shape, rate = 1/b, lower.tail = FALSE).
+  result <- stats::uniroot(
+    function(b) stats::pgamma(1 / x, shape, rate = 1 / b, lower.tail = FALSE) - p,
     interval = c(1e-6, 1e6)
   )
-  
   return(list(shape = shape, scale = result$root, rate = 1/result$root))
-}
-
-# Two quantile constraints: P(X <= x1) = p1 and P(X <= x2) = p2
-inv_gamma_params_dual <- function(x1, p1, x2, p2) {
-  require(nleqslv)
-  require(invgamma)
-  # Solve system of equations
-  result <- nleqslv::nleqslv(
-    x = c(3, 2),  # initial guess for (shape, scale)
-    fn = function(params) {
-      shape <- params[1]
-      scale <- params[2]
-      c(
-        invgamma::pinvgamma(x1, shape = shape, scale = scale) - p1,
-        invgamma::pinvgamma(x2, shape = shape, scale = scale) - p2
-      )
-    }
-  )
-  
-  return(list(shape = result$x[1], scale = result$x[2]))
 }
 
 #===============================================================================
@@ -925,10 +980,12 @@ inv_gamma_params_dual <- function(x1, p1, x2, p2) {
 #                  Helper Function for sparse least squares
 #
 #===============================================================================
-# MatrixModels:::lm.fit.sparse needs a sparse design and a numeric response; X can still be
-# dense here (e.g. no fixed effects) and y is a one-column matrix.
+# Least-squares coefficients for a sparse design (normal equations with a sparse Cholesky);
+# replaces MatrixModels:::lm.fit.sparse. X may still be dense here (e.g. no fixed effects)
+# and y may be a one-column matrix.
 sparse_lm_coef <- function(X, y) {
-  MatrixModels:::lm.fit.sparse(as(as(X, "CsparseMatrix"), "generalMatrix"), as.numeric(y))
+  Xs <- methods::as(methods::as(X, "CsparseMatrix"), "generalMatrix")
+  as.vector(Matrix::solve(Matrix::crossprod(Xs), Matrix::crossprod(Xs, as.numeric(y))))
 }
 
 #===============================================================================

@@ -12,7 +12,7 @@ library(gets)
 library(getspanel)
 library(Matrix)
 library(ggplot2)
-library(bisamcore)
+library(bisam)
 
 
 # Settings ----------------------------------------------------------------
@@ -106,7 +106,7 @@ for(ff in ls_gets){
 
 # BISAM -------------------------------------------------------------------
 
-source("./R/pip_window_fun.R")
+library(bisam)
 
 res$ssvs <- list() # initiate new sub-list
 res$iis <- list()

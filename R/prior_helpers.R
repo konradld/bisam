@@ -1,9 +1,25 @@
-### Prior helpers (verbatim from mombf 3.5.4, R/dmom.R)
-###
-### Product MOM / iMOM cumulative distribution and quantile functions, and the
-### prior-elicitation helpers priorp2g() / mode2g() used by the BISAM scripts to
-### choose the prior dispersion tau.
+### Prior helpers (verbatim from mombf 3.5.4, R/dmom.R; D. Rossell et al., GPL >= 2)
 
+#' MOM and iMOM prior distribution functions
+#'
+#' Cumulative distribution and quantile functions of the univariate MOM prior
+#' \eqn{\theta^2/(\tau V_1) N(\theta; 0, \tau V_1)} and of the iMOM prior with dispersion
+#' \code{tau} (from mombf 3.5.4).
+#'
+#' @param q Vector of quantiles.
+#' @param p Vector of probabilities.
+#' @param V1 Scale (e.g. the residual variance).
+#' @param tau Prior dispersion.
+#' @param nu Degrees of freedom of the iMOM prior.
+#' @return \code{pmom}, \code{pimom}: probabilities; \code{qmom}, \code{qimom}: quantiles.
+#' @examples
+#' pimom(-1, tau = 0.133)
+#' qmom(0.05, tau = 0.348)
+#' @name nlp_distributions
+NULL
+
+#' @rdname nlp_distributions
+#' @export
 pmom <- function(q,V1=1,tau=1) {
 
   z <- .5-(pnorm(abs(q)/sqrt(V1*tau)) - abs(q)/sqrt(2*pi*V1*tau) * exp(-.5*q^2/(tau*V1)) - .5)
@@ -11,6 +27,8 @@ pmom <- function(q,V1=1,tau=1) {
 }
 
 
+#' @rdname nlp_distributions
+#' @export
 qmom <- function(p, V1=1, tau=1) {
 
   e <- function(q) { return((pmom(q, V1, tau)-pneg)^2) }
@@ -26,6 +44,8 @@ qmom <- function(p, V1=1, tau=1) {
 }
 
 
+#' @rdname nlp_distributions
+#' @export
 pimom <- function(q,V1=1,tau=1,nu=1) {
 
   z <- (.5*pgamma(tau*V1/q^2,nu/2,1))
@@ -33,6 +53,8 @@ pimom <- function(q,V1=1,tau=1,nu=1) {
 }
 
 
+#' @rdname nlp_distributions
+#' @export
 qimom <- function(p, V1=1, tau=1, nu=1) {
 
   ans <- double(length(p))
@@ -42,6 +64,27 @@ qimom <- function(p, V1=1, tau=1, nu=1) {
 }
 
 
+#' Prior elicitation for MOM / iMOM priors
+#'
+#' \code{priorp2g} returns the prior dispersion \code{tau} such that the prior probability of
+#' \eqn{|\theta| < q} equals \code{priorp}; \code{mode2g} returns the \code{tau} giving a prior
+#' mode at \code{prior.mode} (from mombf 3.5.4).
+#'
+#' @param priorp Prior probability of \eqn{|\theta| < q}.
+#' @param q Threshold (e.g. a negligible effect size relative to the residual sd).
+#' @param prior.mode Desired prior mode.
+#' @param nu Degrees of freedom (iMOM, tMOM).
+#' @param dim Dimension (for \code{mode2g}).
+#' @param prior \code{"iMom"}, \code{"normalMom"} or \code{"tMom"}.
+#' @return The prior dispersion \code{tau}.
+#' @examples
+#' priorp2g(0.01, 1, prior = "iMom")       # tau used in the BISAM simulations
+#' priorp2g(0.01, 1, prior = "normalMom")
+#' @name prior_elicitation
+NULL
+
+#' @rdname prior_elicitation
+#' @export
 mode2g <- function(prior.mode,
                    prior=c('iMom', 'normalMom', 'tMom'),
                    nu=1,
@@ -63,6 +106,8 @@ mode2g <- function(prior.mode,
 }
 
 
+#' @rdname prior_elicitation
+#' @export
 priorp2g <- function(priorp,
                      q,
                      nu=1,

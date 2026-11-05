@@ -21,7 +21,7 @@ library(stringr)
 library(gets)
 library(getspanel)
 library(Matrix)
-library(bisamcore)
+library(bisam)
 library(glmnet)  # Added for adaptive Lasso
 
 config <- expand.grid(
@@ -93,15 +93,7 @@ S2_TRUE <- ERROR_SD^2
 # DATA SIMULATION
 # ==============================================================================
 
-if (is_slurm) {
-  source("../code/contr_sim_breaks_fun.R")
-  source("../code/estimate_bisam_fun.R")
-  source("../code/pip_window_fun.R")
-} else {
-  source("./R/contr_sim_breaks_fun.R")
-  source("./R/estimate_bisam_fun.R")
-  source("./R/pip_window_fun.R")
-}
+library(bisam)
 
 sim <- contr_sim_breaks(
   n = Ni, 

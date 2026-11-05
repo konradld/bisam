@@ -1,4 +1,22 @@
+#' Break detection with posterior inclusion probabilities over time windows
+#'
+#' Summarises the break indicators of an \code{\link{estimate_bisam}} fit over sliding windows
+#' of \code{win_size} consecutive periods per unit, and reports the windows whose posterior
+#' probability of containing a break exceeds a threshold.
+#'
+#' @param mod Output of \code{\link{estimate_bisam}}.
+#' @param win_size Window length (number of consecutive periods).
+#' @param op \code{">="}: probability of at least one break in the window; \code{"=="}:
+#'   probability of exactly one.
+#' @param pip_threshold Either a number, or a list with \code{c0}, \code{c1}, \code{kappa}
+#'   giving the threshold \code{(c1 + kappa (win_size - 1)) / (c0 + c1)}.
+#' @param cred_int Coverage of the credible interval for the summed break size in a window.
+#' @return A data frame with one row per detected window: unit, period, start and end time,
+#'   posterior mean (\code{MAP}) and credible interval of the summed break size, \code{PIP},
+#'   sign purity of the break sizes, and position indices.
+#' @export
 pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = list(c0 = 1, c1 = 1, kappa = 1/3), cred_int = 0.95) {
+  op <- match.arg(op)
   
   data_pip <- mod$draws$omega
   data_steps <- mod$draws$sis
@@ -56,7 +74,7 @@ pip_window <- function(mod, win_size, op=c(">=","=="), pip_threshold = list(c0 =
       
       # get average step purity
       step_purity <-  sum(sign(colMeans(window_steps)) == sign(mean(row_sums_step))) / 
-        length(window_indices) * sign(mean(row_sums_step))
+        length(sorted_indices) * sign(mean(row_sums_step))
       
       # wrap up
       time_range <- paste(min(sorted_times), "-", max(sorted_times))

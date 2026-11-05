@@ -1,0 +1,10 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.positai$
+^scripts$
+^data$
+^output$
+^LICENSE$
+^.*\.diff$
+^README\.md$
+^\.git$

@@ -25,7 +25,7 @@ library(stringr)
 library(gets)
 library(getspanel)
 library(Matrix)
-library(bisamcore)
+library(bisam)
 library(stochvol)
 
 config <- list(
@@ -47,12 +47,12 @@ if(is_slurm) {
   dir_res <- sprintf("./results/%s/", 
                      config$date)
   dir_data <- "./CO2DriversEU_dataset_CLEAN.csv"
-  source("../code/estimate_bisam_fun.R")
+  library(bisam)
 } else {
   dir_res <- sprintf("./output/emissions/%s/", 
                      config$date)
   dir_data <- "./data/CO2DriversEU_dataset_CLEAN.csv"
-  source("./R/estimate_bisam_fun.R")
+  library(bisam)
 }
 
 dir.create(dir_res, 

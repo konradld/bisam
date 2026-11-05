@@ -1,32 +1,22 @@
-# bisamcore
+# Implementation notes: the compiled core of bisam
 
-The compiled core of `estimate_bisam()` (`R/estimate_bisam_fun.R`). It is **derived from
-[mombf](https://github.com/davidrusi/mombf) 3.5.4** (David Rossell et al., GPL >= 2), but it is
-not a version of mombf: only the parts BISAM needs were kept, they were re-implemented for
-speed, and some were extended (near-global iMOM posterior mode, R's RNG). See "Differences to
-mombf 3.5.4" below.
+The compiled routines in `src/bisam_core.cpp` are derived from
+[mombf](https://github.com/davidrusi/mombf) 3.5.4 (David Rossell et al., GPL >= 2). Only the
+parts needed by `estimate_bisam()` were kept; they were re-implemented for speed and extended.
+Earlier versions of this repository shipped them as a separate package (first `mombf`
+3.5.4.9000, then `bisamcore`).
 
-Install with `source("inst/install_bisamcore.R")` from the repository root. bisamcore does not
-conflict with CRAN mombf; scripts that need the full mombf (e.g.
-`scripts/16_prior_comparison_rates.R`, which calls `nlpMarginal()` with Zellner and normal
-priors) load CRAN mombf, which can be installed alongside. Earlier versions of this repository
-installed this code under the name `mombf` (version 3.5.4.9000); the install script removes
-that build if present.
-
-## Contents
+Internal entry points (not exported; call as `bisam:::name`):
 
 | Function | Purpose |
 |---|---|
-| `bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 0)` | Gibbs sampler over the inclusion indicators of one unit's break columns. Same algorithm and output as `mombf::modelSelection(..., method = "ALA", phi = phi, enumerate = FALSE, initSearch = "none", center = FALSE, scale = FALSE)` for `momprior()` / `imomprior()` and `modelbinomprior()` / `modelbbprior()` (with `imom_method = 0` for the iMOM prior). Returns `postSample` (logical matrix) and `margpp`. |
-| `bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit, newflag)` | Break-size draws from the MOM / iMOM posterior with known `phi` (latent truncation Gibbs sampler of Rossell & Telesca 2017, Alg. 2); returns the last of `niter` draws. Coordinates flagged in `newflag` start at the maximiser of their conditional posterior; `niter = burnin = 0` returns the starting values. |
-| `bisam_log_joint(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 0)` | Log integrated likelihood + log model prior of one model (diagnostics). |
-| `bisam_imom_mode(y, x, sel, tau, phi, method, start)` | iMOM posterior mode of one model: 0 = legacy mombf iteration, 1 = near-global, 2 = Newton from `start` (signs fixed), 3 = sign-switching descent from `start` (diagnostics). |
-| `bisam_imom_stats(reset)`, `bisam_set_imom_exhaustive_max(mmax, starts)` | Counters (calls and time of mode searches by model size) and tuning of the exhaustive search (diagnostics). |
-| `priorp2g`, `mode2g`, `pmom`, `qmom`, `pimom`, `qimom` | Prior elicitation helpers, verbatim from mombf. |
+| `bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 0)` | Gibbs sampler over the break indicators of one unit (same algorithm as `mombf::modelSelection(..., method = "ALA", phi = phi)`). |
+| `bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit, newflag)` | Break-size draws from the MOM / iMOM posterior with known `phi` (Rossell & Telesca 2017, Alg. 2). |
+| `bisam_log_joint(...)`, `bisam_imom_mode(...)`, `bisam_imom_stats()`, `bisam_set_imom_exhaustive_max()` | Diagnostics. |
 
-Codes: `prior` 0 = product MOM (r = 1), 1 = product iMOM; `priorDelta` 1 = Bernoulli(`p_incl`),
-2 = Beta-Bernoulli(`bb_a`, `bb_b`); `imom_method` (iMOM only) 0 = ALA at the legacy mombf mode (default),
-1 = ALA at the near-global mode, 2 = Laplace at the near-global mode.
+Codes: `prior` 0 = product MOM (r = 1), 1 = product iMOM; `priorDelta` 1 = Bernoulli, 2 =
+Beta-Bernoulli; `imom_method` 0 = ALA at the legacy mombf mode (default), 1 = ALA at the
+near-global mode, 2 = Laplace at the near-global mode.
 
 ## iMOM integrated likelihood and the posterior mode
 
