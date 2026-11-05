@@ -18,7 +18,7 @@ that build if present.
 | Function | Purpose |
 |---|---|
 | `bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 0)` | Gibbs sampler over the inclusion indicators of one unit's break columns. Same algorithm and output as `mombf::modelSelection(..., method = "ALA", phi = phi, enumerate = FALSE, initSearch = "none", center = FALSE, scale = FALSE)` for `momprior()` / `imomprior()` and `modelbinomprior()` / `modelbbprior()` (with `imom_method = 0` for the iMOM prior). Returns `postSample` (logical matrix) and `margpp`. |
-| `bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit)` | Break-size draws from the MOM / iMOM posterior with known `phi`; returns the last of `niter` draws. Same algorithm as the earlier bespoke `rnlp_new(..., knownphi = TRUE, use_thinit = TRUE)`. |
+| `bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit, newflag)` | Break-size draws from the MOM / iMOM posterior with known `phi` (latent truncation Gibbs sampler of Rossell & Telesca 2017, Alg. 2); returns the last of `niter` draws. Coordinates flagged in `newflag` start at the maximiser of their conditional posterior; `niter = burnin = 0` returns the starting values. |
 | `bisam_log_joint(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 0)` | Log integrated likelihood + log model prior of one model (diagnostics). |
 | `bisam_imom_mode(y, x, sel, tau, phi, method, start)` | iMOM posterior mode of one model: 0 = legacy mombf iteration, 1 = near-global, 2 = Newton from `start` (signs fixed), 3 = sign-switching descent from `start` (diagnostics). |
 | `bisam_imom_stats(reset)`, `bisam_set_imom_exhaustive_max(mmax, starts)` | Counters (calls and time of mode searches by model size) and tuning of the exhaustive search (diagnostics). |
@@ -65,7 +65,17 @@ need recalibration before switching.
   `imom_method = 1, 2` use the near-global mode instead (see above); they are 1.5-3.5x slower.
 * Random numbers come from R's RNG (`set.seed()` works). mombf 3.5.4 drew the model-selection
   and break-size random numbers from an internal generator with fixed seeds.
-* Normal cdf/quantiles in the truncated-normal sampler use R's `pnorm`/`qnorm`.
+* Break-size sampler (`bisam_rnlp`): truncated-normal draws use log-scale tail probabilities and
+  quantiles (mombf computed 1 - Phi in the upper tail and clamped quantiles at 8.2 sd: for an iMOM
+  prior with tau = 100 and a long step this biased the posterior mean by 0.6 sd and the sd by
+  -27%); the inverse iMOM penalty is solved to machine precision (mombf: 1e-5); breaks that just
+  entered the model can start at their conditional posterior mode. The stationary distribution
+  was checked against exact 1- and 2-d posteriors (numerical integration), and the tail sampler
+  against exact truncated normals and Robert's (1995) exponential-rejection sampler up to 40 sd.
+  The sampler mixes slowly for nearby (correlated) breaks. Because the break indicators are drawn
+  with the sizes integrated out, `estimate_bisam()` now runs `rnlp_iter = 25` iterations when a
+  unit's set of breaks changed and 1 iteration otherwise (previously always 3, starting new breaks
+  from stale values, which in full runs with many breaks inflated sigma^2 by ~5%).
 
 The algorithms were validated against mombf 3.5.4 (identical Gibbs draws given the same
 random numbers); see the commit history of the BISAM repository.

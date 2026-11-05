@@ -1,0 +1,407 @@
+diff --git a/R/estimate_bisam_fun.R b/R/estimate_bisam_fun.R
+index 8a5d17e46..232cc5b55 100644
+--- a/R/estimate_bisam_fun.R
++++ b/R/estimate_bisam_fun.R
+@@ -15,6 +15,7 @@ estimate_bisam <- function(
+     beta_prior = "g",  # Options: "g" (Zellner's G-Prior), "f" (Hagan's Fractional Prior)
+     step_size_prior = c("mom", "imom"),
+     imom_marginal = c("ala_legacy", "ala", "laplace"), # iMOM integrated likelihood (see below)
++    rnlp_iter = 25L,           # break-size Gibbs iterations after a unit's break set changed; see below
+     step_incl_prior = c("bern", "beta_bern"),
+     # Prior hyperparameters
+     beta_variance_scale = 1000, # Variance scaling parameter for beta coefficients
+@@ -306,7 +307,6 @@ estimate_bisam <- function(
+   # ============================================================================
+   b_i <- beta_mean
+   g_i <- numeric(r)
+-  g_incl_i <- rep(sd(y) / 100, r)  # Always non-zero for rnlp within Gibbs
+   s2_i <- rep(1 / rgamma(1, shape = sigma2_shape, rate = sigma2_rate), N)
+   sqrt_s2_i <- sqrt(s2_i)
+   
+@@ -447,8 +447,19 @@ estimate_bisam <- function(
+   
+   nn <- 2 # number of model-selection Gibbs iterations (burn-in nn - 1)
+   
+-  ngdraw <- 1 # number of break-size (rnlp) Gibbs iterations saved
+-  ngburn <- 2 # number of break-size (rnlp) Gibbs iterations burned
++  # Break sizes are drawn with the latent truncation Gibbs sampler (Rossell & Telesca 2017,
++  # Alg. 2). The break indicators are drawn with the sizes integrated out, so:
++  #  * if a unit's set of breaks is unchanged, its previous sizes are already a draw from their
++  #    conditional posterior and one Gibbs iteration (invariant for the new conditional, given
++  #    the updated beta and sigma^2) is a valid update;
++  #  * if the set changed, the previous sizes belong to another model, so a converged draw is
++  #    needed: rnlp_iter iterations, new breaks starting at their conditional posterior mode.
++  # Earlier code: 3 iterations always, new breaks started from stale values. In full runs with
++  # many breaks (MOM prior) this inflated sigma^2 by ~5% and shifted break sizes and PIPs.
++  # With this scheme, rnlp_iter = 25 matched a 200-iteration reference within Monte Carlo
++  # error; rnlp_iter = 12 still left sigma^2 about 1% too high.
++  rnlp_iter <- as.integer(rnlp_iter)
++  if (rnlp_iter < 1) stop("rnlp_iter must be >= 1")
+   
+   # Initialize objects in loop
+   y_aug <- y
+@@ -715,19 +726,24 @@ estimate_bisam <- function(
+           phi_rnlp <- s2_i_tmp[j]
+         }
+         
+-        # Non-local posterior draw of the selected break sizes (known phi), started at
+-        # the last non-zero draw of each break
++        # Non-local posterior draw of the selected break sizes (known phi). Breaks that stay
++        # in the model start from their previous draw; breaks that just entered (previous
++        # value 0) start at the maximiser of their conditional posterior given the others.
++        g_prev <- g_i[p_idx_full][colsel]
++        is_new <- g_prev == 0                       # break just entered (was excluded)
++        set_changed <- any((g_i[p_idx_full] != 0) != w_i[p_idx_full])  # a break entered or left
++        n_rnlp <- if (set_changed) rnlp_iter else 1L
+         g_draw[colsel] <- bisamcore::bisam_rnlp(
+           y = as.vector(y_rnlp),
+           x = z_rnlp,
+           prior = sis_prior_code,
+           tau = step_size_scale,
+           phi = phi_rnlp,
+-          niter = ngburn + ngdraw,
+-          burnin = ngburn,
+-          thinit = g_incl_i[p_idx_full][colsel]
++          niter = n_rnlp,
++          burnin = n_rnlp - 1L,
++          thinit = ifelse(is_new, 1, g_prev),
++          newflag = is_new
+         )
+-        g_incl_i[p_idx][w_i[p_idx]] <- g_draw[colsel]
+       }
+       g_i[p_idx_full] <- g_draw
+     }
+diff --git a/inst/bisamcore/R/RcppExports.R b/inst/bisamcore/R/RcppExports.R
+index 8a6d5a2f3..24aa2f7da 100644
+--- a/inst/bisamcore/R/RcppExports.R
++++ b/inst/bisamcore/R/RcppExports.R
+@@ -21,7 +21,7 @@ bisam_log_joint <- function(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a
+     .Call(`_bisamcore_bisam_log_joint`, y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method)
+ }
+ 
+-bisam_rnlp <- function(y, x, prior, tau, phi, niter, burnin, thinit) {
+-    .Call(`_bisamcore_bisam_rnlp`, y, x, prior, tau, phi, niter, burnin, thinit)
++bisam_rnlp <- function(y, x, prior, tau, phi, niter, burnin, thinit, newflag = logical()) {
++    .Call(`_bisamcore_bisam_rnlp`, y, x, prior, tau, phi, niter, burnin, thinit, newflag)
+ }
+ 
+diff --git a/inst/bisamcore/README.md b/inst/bisamcore/README.md
+index da0feb569..c37c25355 100644
+--- a/inst/bisamcore/README.md
++++ b/inst/bisamcore/README.md
+@@ -18,7 +18,7 @@ that build if present.
+ | Function | Purpose |
+ |---|---|
+ | `bisam_ms_gibbs(y, x, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, niter, burnin, deltaini, imom_method = 0)` | Gibbs sampler over the inclusion indicators of one unit's break columns. Same algorithm and output as `mombf::modelSelection(..., method = "ALA", phi = phi, enumerate = FALSE, initSearch = "none", center = FALSE, scale = FALSE)` for `momprior()` / `imomprior()` and `modelbinomprior()` / `modelbbprior()` (with `imom_method = 0` for the iMOM prior). Returns `postSample` (logical matrix) and `margpp`. |
+-| `bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit)` | Break-size draws from the MOM / iMOM posterior with known `phi`; returns the last of `niter` draws. Same algorithm as the earlier bespoke `rnlp_new(..., knownphi = TRUE, use_thinit = TRUE)`. |
++| `bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit, newflag)` | Break-size draws from the MOM / iMOM posterior with known `phi` (latent truncation Gibbs sampler of Rossell & Telesca 2017, Alg. 2); returns the last of `niter` draws. Coordinates flagged in `newflag` start at the maximiser of their conditional posterior; `niter = burnin = 0` returns the starting values. |
+ | `bisam_log_joint(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method = 0)` | Log integrated likelihood + log model prior of one model (diagnostics). |
+ | `bisam_imom_mode(y, x, sel, tau, phi, method, start)` | iMOM posterior mode of one model: 0 = legacy mombf iteration, 1 = near-global, 2 = Newton from `start` (signs fixed), 3 = sign-switching descent from `start` (diagnostics). |
+ | `bisam_imom_stats(reset)`, `bisam_set_imom_exhaustive_max(mmax, starts)` | Counters (calls and time of mode searches by model size) and tuning of the exhaustive search (diagnostics). |
+@@ -65,7 +65,17 @@ need recalibration before switching.
+   `imom_method = 1, 2` use the near-global mode instead (see above); they are 1.5-3.5x slower.
+ * Random numbers come from R's RNG (`set.seed()` works). mombf 3.5.4 drew the model-selection
+   and break-size random numbers from an internal generator with fixed seeds.
+-* Normal cdf/quantiles in the truncated-normal sampler use R's `pnorm`/`qnorm`.
++* Break-size sampler (`bisam_rnlp`): truncated-normal draws use log-scale tail probabilities and
++  quantiles (mombf computed 1 - Phi in the upper tail and clamped quantiles at 8.2 sd: for an iMOM
++  prior with tau = 100 and a long step this biased the posterior mean by 0.6 sd and the sd by
++  -27%); the inverse iMOM penalty is solved to machine precision (mombf: 1e-5); breaks that just
++  entered the model can start at their conditional posterior mode. The stationary distribution
++  was checked against exact 1- and 2-d posteriors (numerical integration), and the tail sampler
++  against exact truncated normals and Robert's (1995) exponential-rejection sampler up to 40 sd.
++  The sampler mixes slowly for nearby (correlated) breaks. Because the break indicators are drawn
++  with the sizes integrated out, `estimate_bisam()` now runs `rnlp_iter = 25` iterations when a
++  unit's set of breaks changed and 1 iteration otherwise (previously always 3, starting new breaks
++  from stale values, which in full runs with many breaks inflated sigma^2 by ~5%).
+ 
+ The algorithms were validated against mombf 3.5.4 (identical Gibbs draws given the same
+ random numbers); see the commit history of the BISAM repository.
+diff --git a/inst/bisamcore/src/RcppExports.cpp b/inst/bisamcore/src/RcppExports.cpp
+index d9474e373..594baa976 100644
+--- a/inst/bisamcore/src/RcppExports.cpp
++++ b/inst/bisamcore/src/RcppExports.cpp
+@@ -96,8 +96,8 @@ BEGIN_RCPP
+ END_RCPP
+ }
+ // bisam_rnlp
+-NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int niter, int burnin, NumericVector thinit);
+-RcppExport SEXP _bisamcore_bisam_rnlp(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP thinitSEXP) {
++NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int niter, int burnin, NumericVector thinit, LogicalVector newflag);
++RcppExport SEXP _bisamcore_bisam_rnlp(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP thinitSEXP, SEXP newflagSEXP) {
+ BEGIN_RCPP
+     Rcpp::RObject rcpp_result_gen;
+     Rcpp::RNGScope rcpp_rngScope_gen;
+@@ -109,7 +109,8 @@ BEGIN_RCPP
+     Rcpp::traits::input_parameter< int >::type niter(niterSEXP);
+     Rcpp::traits::input_parameter< int >::type burnin(burninSEXP);
+     Rcpp::traits::input_parameter< NumericVector >::type thinit(thinitSEXP);
+-    rcpp_result_gen = Rcpp::wrap(bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit));
++    Rcpp::traits::input_parameter< LogicalVector >::type newflag(newflagSEXP);
++    rcpp_result_gen = Rcpp::wrap(bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit, newflag));
+     return rcpp_result_gen;
+ END_RCPP
+ }
+@@ -120,7 +121,7 @@ static const R_CallMethodDef CallEntries[] = {
+     {"_bisamcore_bisam_imom_stats", (DL_FUNC) &_bisamcore_bisam_imom_stats, 1},
+     {"_bisamcore_bisam_ms_gibbs", (DL_FUNC) &_bisamcore_bisam_ms_gibbs, 13},
+     {"_bisamcore_bisam_log_joint", (DL_FUNC) &_bisamcore_bisam_log_joint, 11},
+-    {"_bisamcore_bisam_rnlp", (DL_FUNC) &_bisamcore_bisam_rnlp, 8},
++    {"_bisamcore_bisam_rnlp", (DL_FUNC) &_bisamcore_bisam_rnlp, 9},
+     {NULL, NULL, 0}
+ };
+ 
+diff --git a/inst/bisamcore/src/bisam_core.cpp b/inst/bisamcore/src/bisam_core.cpp
+index 790af0f3a..3e0712df5 100644
+--- a/inst/bisamcore/src/bisam_core.cpp
++++ b/inst/bisamcore/src/bisam_core.cpp
+@@ -20,7 +20,7 @@
+ //    Integrated likelihoods of visited models are cached within a call.
+ //
+ //  * bisam_rnlp(): break-size draws from the non-local posterior given the selected
+-//    model and known phi (port of mombf's rnlpPost_lm_new / rnlp_Gibbs).
++//    model and known phi (from mombf's rnlpPost_lm_new / rnlp_Gibbs, with accuracy fixes).
+ //
+ //  * bisam_log_joint(), bisam_imom_mode(), bisam_imom_stats(),
+ //    bisam_set_imom_exhaustive_max(): diagnostics and tests.
+@@ -685,8 +685,15 @@ double bisam_log_joint(NumericVector y, NumericMatrix x, IntegerVector sel, int
+ // prior penalty, which turns the non-local posterior into a N(m, phi S^{-1}) truncated to
+ // |th_j| >= upper_j; the truncated normal is then sampled one coordinate at a time in the
+ // whitened scale z = chol(S^{-1})^{-1} th / sqrt(phi). Matrix helpers keep mombf's loop order.
+-// The only change is that Normal cdf/quantiles come from R (pnorm/qnorm) instead of
+-// mombf's copy of dcdflib.
++// Changes to mombf (for accuracy):
++//  * truncated-normal draws use log-scale tail probabilities/quantiles (mombf computed 1 - Phi
++//    in the upper tail and clamped quantiles at 8.2 sd, which biased draws far from the mean);
++//  * the inverse iMOM penalty is solved to machine precision (mombf: |error| <= 1e-5, log scale);
++//  * optional `newflag`: coordinates without a valid previous value start at the maximiser of
++//    their conditional posterior instead of an arbitrary value.
++// The stationary distribution was checked against exact (numerically integrated) 1- and 2-d
++// posteriors. The chain mixes slowly for correlated coefficients, so a caller that needs a fresh
++// draw (e.g. after the model changed) should run enough iterations (estimate_bisam: rnlp_iter).
+ // ---------------------------------------------------------------------------
+ typedef std::vector<double> dvec;
+ typedef std::vector<dvec> dmat;   // row-major, dense p x p
+@@ -740,33 +747,54 @@ static void matvec(const dmat &A, const dvec &x, dvec &z, int n) {
+   }
+ }
+ 
+-static inline double pnorm_c(double y, double m, double s) {   // mombf pnormC clamps
+-  double z = (y - m) / s;
+-  if (z < -20.0) return 2.753624e-89;
+-  if (z > 20.0) return 1 - 2.753624e-89;
+-  return R::pnorm(y, m, s, 1, 0);
++// Log probability of [a, b] under N(0, 1), accurate far into either tail: intervals above
++// the mean use upper-tail probabilities, intervals below use lower-tail ones (log scale).
++static double lmass_std(double a, double b) {
++  if (a >= 0.0) {
++    double la = R::pnorm(a, 0.0, 1.0, 0, 1), lb = R::pnorm(b, 0.0, 1.0, 0, 1);
++    return la + std::log1p(-std::exp(lb - la));
++  }
++  if (b <= 0.0) {
++    double la = R::pnorm(a, 0.0, 1.0, 1, 1), lb = R::pnorm(b, 0.0, 1.0, 1, 1);
++    return lb + std::log1p(-std::exp(la - lb));
++  }
++  return std::log(R::pnorm(b, 0.0, 1.0, 1, 0) - R::pnorm(a, 0.0, 1.0, 1, 0));
+ }
+ 
+-static inline double qnorm_c(double cdf, double m, double s) { // mombf qnormC clamps
+-  if (cdf <= 2.753624e-89) return -20.0 * s + m;
+-  if (cdf >= 0.99999999999999989) return 8.209536 * s + m;
+-  return R::qnorm(cdf, m, s, 1, 0);
++// Inverse-cdf draw from N(0, 1) truncated to [a, b] given v ~ U(0, 1), computed on the tail
++// where the probabilities are accurate (log scale), so it stays exact far into the tails.
++static double qtrunc_std(double a, double b, double v) {
++  double x;
++  if (a >= 0.0) {          // upper tail: S(x) = S(a) - v (S(a) - S(b))
++    double la = R::pnorm(a, 0.0, 1.0, 0, 1), lb = R::pnorm(b, 0.0, 1.0, 0, 1);
++    x = R::qnorm(la + std::log1p(-v * (-std::expm1(lb - la))), 0.0, 1.0, 0, 1);
++  } else if (b <= 0.0) {   // lower tail: mirror image
++    double la = R::pnorm(-b, 0.0, 1.0, 0, 1), lb = R::pnorm(-a, 0.0, 1.0, 0, 1);
++    x = -R::qnorm(la + std::log1p(-(1.0 - v) * (-std::expm1(lb - la))), 0.0, 1.0, 0, 1);
++  } else {                 // interval around the mean: plain cdf is accurate
++    double pa = R::pnorm(a, 0.0, 1.0, 1, 0), pb = R::pnorm(b, 0.0, 1.0, 1, 0);
++    x = R::qnorm(pa + v * (pb - pa), 0.0, 1.0, 1, 0);
++  }
++  return std::min(std::max(x, a), b);  // guard against rounding at the interval ends
+ }
+ 
+ // One draw from N(m, 1) restricted to the union of the disjoint ordered intervals
+-// [lo[i], hi[i]], i = 0..nint-1 (mombf rnorm_truncMult with n = 1, s = 1)
++// [lo[i], hi[i]], i = 0..nint-1. Same scheme as mombf's rnorm_truncMult (one uniform: pick
++// the interval by its probability, then invert the cdf inside it), but with probabilities and
++// quantiles computed on the log scale in the appropriate tail. mombf computed 1 - Phi in the
++// upper tail and clamped quantiles at 8.2 sd, which biased draws far from the mean.
+ static double rnorm_trunc_union(const dvec &lo, const dvec &hi, int nint, double m) {
+-  dvec p0(nint), p1(nint), cump(nint + 1);
+-  cump[0] = 0.0;
+-  for (int i = 0; i < nint; i++) {
+-    p0[i] = pnorm_c(lo[i], m, 1.0);
+-    p1[i] = pnorm_c(hi[i], m, 1.0);
+-    cump[i + 1] = std::max(cump[i] + 1.0e-30, cump[i] + p1[i] - p0[i]);
+-  }
+-  double u = unif_rand() * cump[nint];
++  dvec lm(nint);
++  double lmax = R_NegInf;
++  for (int i = 0; i < nint; i++) { lm[i] = lmass_std(lo[i] - m, hi[i] - m); lmax = std::max(lmax, lm[i]); }
++  double tot = 0.0;
++  for (int i = 0; i < nint; i++) { lm[i] = std::exp(lm[i] - lmax); tot += lm[i]; }
++  double u = unif_rand() * tot, cum = 0.0;
+   int j = 0;
+-  while ((u > cump[j + 1]) && (j < nint - 1)) j++;
+-  return qnorm_c(p0[j] + u - cump[j], m, 1.0);
++  while (j < nint - 1 && u > cum + lm[j]) { cum += lm[j]; j++; }
++  double v = (lm[j] > 0.0) ? (u - cum) / lm[j] : 0.5;
++  v = std::min(std::max(v, 0.0), 1.0);
++  return m + qtrunc_std(lo[j] - m, hi[j] - m, v);
+ }
+ 
+ // One Gibbs sweep for z ~ N(alpha, I) with (D z)_k outside (lower[k], upper[k]) for all k.
+@@ -826,46 +854,47 @@ static inline double pen_imom_log(double th, double phi, double tau) {
+ 
+ // Inverse of the iMOM log-penalty: |th| s.t. pen_imom_log(th) = loglambda (mombf invpen_imom_sandwich)
+ static double invpen_imom(double loglambda, double phi, double tau) {
+-  const int maxiter = 50; const double ftol = 1.0e-5;
++  // In z = th^2 the log-penalty g(z) = const - log z - tau phi / z + z / (2 tau phi) is strictly
++  // increasing (its derivative times z^2 is z^2/(2 tau phi) - z + tau phi > 0), so the root is
++  // unique. Bracket it as in mombf, then refine by safeguarded Newton to machine precision
++  // (mombf stopped at |g - loglambda| <= 1e-5 using linear interpolation).
++  const double tp = tau * phi;
++  auto g = [&](double z) { return pen_imom_log(std::sqrt(z), phi, tau); };
+   double b = .5 * (std::log(tau * tau) + 2.0 * std::log(phi) + std::log(2.0)) - loglambda;
+   double d = std::sqrt(b * b + 2.0);
+-  double zcur = tau * phi * (-b + d), thcur = std::sqrt(zcur), fcur = pen_imom_log(thcur, phi, tau);
+-  double zlow, flow, zup, fup, thlow, thup;
++  double zcur = tp * (-b + d), fcur = g(zcur), zlow, zup;
+   if (fcur >= loglambda) {
+-    zlow = .8 * .8 * zcur; thlow = std::sqrt(zlow); flow = pen_imom_log(thlow, phi, tau);
+-    while (flow >= loglambda) {
+-      zcur = zlow; thcur = thlow; fcur = flow;
+-      zlow = .8 * .8 * zcur; thlow = std::sqrt(zlow); flow = pen_imom_log(thlow, phi, tau);
+-    }
+-    zup = zcur; fup = fcur;
++    zup = zcur; zlow = .8 * .8 * zcur;
++    while (g(zlow) >= loglambda) { zup = zlow; zlow = .8 * .8 * zlow; }
+   } else {
+-    zup = 1.2 * 1.2 * zcur; thup = std::sqrt(zup); fup = pen_imom_log(thup, phi, tau);
+-    while (fup <= loglambda) {
+-      zcur = zup; thcur = thup; fcur = fup;
+-      zup = 1.2 * 1.2 * zcur; thup = std::sqrt(zup); fup = pen_imom_log(thup, phi, tau);
+-    }
+-    zlow = zcur; flow = fcur;
+-  }
+-  double err = fcur - loglambda;
+-  for (int i = 1; i < maxiter && std::fabs(err) > ftol; i++) {
+-    double slope = (fup - flow) / (zup - zlow);
+-    zcur = zlow + (loglambda - flow) / slope;
+-    thcur = std::sqrt(zcur);
+-    fcur = pen_imom_log(thcur, phi, tau);
+-    err = fcur - loglambda;
+-    if (err > 0) { zup = zcur; fup = fcur; } else { zlow = zcur; flow = fcur; }
+-  }
+-  return thcur;
++    zlow = zcur; zup = 1.2 * 1.2 * zcur;
++    while (g(zup) <= loglambda) { zlow = zup; zup = 1.2 * 1.2 * zup; }
++  }
++  double z = (zcur > zlow && zcur < zup) ? zcur : 0.5 * (zlow + zup);
++  for (int it = 0; it < 100; it++) {
++    double f = g(z) - loglambda;
++    if (f == 0.0) break;
++    if (f > 0.0) zup = z; else zlow = z;
++    double fp = -1.0 / z + tp / (z * z) + 1.0 / (2.0 * tp);   // g'(z) > 0
++    double znew = z - f / fp;
++    if (!(znew > zlow && znew < zup)) znew = 0.5 * (zlow + zup);
++    if (std::fabs(znew - z) <= 1e-15 * z || zup - zlow <= 1e-15 * zup) { z = znew; break; }
++    z = znew;
++  }
++  return std::sqrt(z);
+ }
+ 
+ // Returns the last draw (length ncol(x)); niter Gibbs iterations, the first `burnin` discarded.
++// niter = burnin = 0 returns the starting values (after the newflag initialisation).
+ // [[Rcpp::export]]
+ NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau, double phi,
+-                         int niter, int burnin, NumericVector thinit) {
++                         int niter, int burnin, NumericVector thinit,
++                         LogicalVector newflag = LogicalVector()) {
+   const int n = y.size(), p = x.ncol();
+   if (x.nrow() != n) stop("bisam_rnlp: dimensions of y and x do not match");
+   if (thinit.size() != p) stop("bisam_rnlp: thinit must have length ncol(x)");
+-  if (niter - burnin < 1) stop("bisam_rnlp: niter must exceed burnin");
++  if (niter == 0 && burnin == 0) { /* diagnostics: return the starting values (after newflag initialisation) */ }
++  else if (niter - burnin < 1) stop("bisam_rnlp: niter must exceed burnin");
+   if (prior != 0 && prior != 1) stop("bisam_rnlp: prior must be 0 (MOM) or 1 (iMOM)");
+   const double *X = x.begin(), *Y = y.begin();
+ 
+@@ -905,6 +934,35 @@ NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau
+   }
+ 
+   dvec th(thinit.begin(), thinit.end()), lower(p), upper(p), z(p);
++
++  // Starting values for coordinates flagged in `newflag` (e.g. breaks that just entered the
++  // model, whose previous value is stale): set each, in turn, to the maximiser of the
++  // conditional posterior given the other coordinates, choosing the better sign. With
++  // -log posterior = .5 th'S th / phi - th'X'y / phi - sum log d(th_j), the 1-d section is
++  //   pMOM : .5 a y^2 - B y - 2 log y,                       a = S_jj / phi
++  //   piMOM: .5 a' y^2 - B y + tau phi / y^2 + 2 log y,      a' = S_jj / phi - 1/(tau phi)
++  // (y = |th_j| on a given sign side, B = sign * partial residual).
++  if (newflag.size() > 0) {
++    if (newflag.size() != p) stop("bisam_rnlp: newflag must have length ncol(x)");
++    for (int j = 0; j < p; j++) {
++      if (!newflag[j]) continue;
++      double Bj = Xty[j];
++      for (int k = 0; k < p; k++) if (k != j) Bj -= S[j][k] * th[k];
++      Bj /= phi;
++      double a = S[j][j] / phi, yp, ym, gp, gm;
++      if (prior == 0) {
++        yp = (Bj + std::sqrt(Bj * Bj + 8.0 * a)) / (2.0 * a);
++        ym = (-Bj + std::sqrt(Bj * Bj + 8.0 * a)) / (2.0 * a);
++        gp = 0.5 * a * yp * yp - Bj * yp - 2.0 * std::log(yp);
++        gm = 0.5 * a * ym * ym + Bj * ym - 2.0 * std::log(ym);
++      } else {
++        double ap = a - 1.0 / (tau * phi);
++        yp = best_positive_min(ap,  Bj, tau * phi, std::sqrt(tau * phi), &gp);
++        ym = best_positive_min(ap, -Bj, tau * phi, std::sqrt(tau * phi), &gm);
++      }
++      th[j] = (gp <= gm) ? yp : -ym;
++    }
++  }
+   for (int it = 1; it <= niter; it++) {
+     for (int i = 0; i < p; i++) {
+       if (prior == 0) {           // MOM, r = 1: slice under (th^2 / (phi tau))
+diff --git a/inst/bisamcore/tests/test-bisam-core.R b/inst/bisamcore/tests/test-bisam-core.R
+index edbae0910..24727182d 100644
+--- a/inst/bisamcore/tests/test-bisam-core.R
++++ b/inst/bisamcore/tests/test-bisam-core.R
+@@ -52,4 +52,31 @@ for (rep in 1:25) {
+             abs(bisam_log_joint(yy, z, s0, 1L, tau3, 1, 1L, 0.5, 1, 1, 2L) -
+                 (k - glo$f + m / 2 * log(2 * pi) - 0.5 * as.numeric(determinant(H)$modulus))) < 1e-6)
+ }
++# Break-size sampler (bisam_rnlp): stationary distribution vs the exact 1-d posterior,
++# including a case far in the Normal tail (iMOM, tau = 100), where mombf's sampler was biased
++lpr <- list(mom  = function(th, tau) log(th^2 / tau) + dnorm(th, 0, sqrt(tau), log = TRUE),
++            imom = function(th, tau) 0.5 * log(tau) - 0.5 * log(pi) - log(th^2) - tau / th^2)
++for (cs in list(list("mom", 0.348, 25, 0.6), list("imom", 3.317448, 25, 0), list("imom", 100, 28, 0.2))) {
++  set.seed(4); pr <- cs[[1]]; tau1 <- cs[[2]]; k <- cs[[3]]
++  x1 <- matrix(1, k, 1); y1 <- rnorm(k); y1 <- y1 - mean(y1) + cs[[4]]   # data mean fixed at cs[[4]]
++  lf <- function(th) lpr[[pr]](th, tau1) - 0.5 * k * (th - mean(y1))^2
++  g <- seq(-6, 6, length.out = 400001); g <- g[g != 0]; w <- exp(lf(g) - max(lf(g))); w <- w / sum(w)
++  ex_m <- sum(w * g); ex_sd <- sqrt(sum(w * g^2) - ex_m^2)
++  th <- mean(y1) + 0.5; dr <- numeric(20000)
++  for (i in seq_along(dr)) { th <- bisam_rnlp(y1, x1, if (pr == "imom") 1L else 0L, tau1, 1, 1L, 0L, th); dr[i] <- th }
++  dr <- dr[-(1:1000)]
++  stopifnot(abs(mean(dr) - ex_m) < 0.1 * ex_sd, abs(sd(dr) / ex_sd - 1) < 0.1)
++}
++
++# Smart start (newflag): the flagged coordinate is set to the maximiser of its conditional posterior
++x2 <- z[, c(5, 18)]; y2 <- as.vector(x2 %*% c(2, -1.5) + rnorm(t)); tau2 <- 3.317448
++S2 <- crossprod(x2) + diag(1 / tau2, 2); xy2 <- as.vector(crossprod(x2, y2)); th1 <- 1.7
++for (pr in c("imom", "mom")) {
++  nlp_pr <- function(th2) { th <- c(th1, th2); 0.5 * sum(th * (S2 %*% th)) - sum(th * xy2) -
++    sum(lpr[[pr]](th, tau2) - dnorm(th, 0, sqrt(tau2), log = TRUE)) }
++  o <- list(optimize(nlp_pr, c(-10, -1e-4), tol = 1e-12), optimize(nlp_pr, c(1e-4, 10), tol = 1e-12))
++  argbest <- o[[which.min(sapply(o, `[[`, "objective"))]]$minimum
++  s0 <- bisam_rnlp(y2, x2, if (pr == "imom") 1L else 0L, tau2, 1, 0L, 0L, c(th1, 1), c(FALSE, TRUE))
++  stopifnot(s0[1] == th1, abs(s0[2] - argbest) < 1e-5)
++}
+ cat("All BISAM core tests passed\n")

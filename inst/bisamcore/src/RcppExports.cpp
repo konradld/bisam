@@ -96,8 +96,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // bisam_rnlp
-NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int niter, int burnin, NumericVector thinit);
-RcppExport SEXP _bisamcore_bisam_rnlp(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP thinitSEXP) {
+NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau, double phi, int niter, int burnin, NumericVector thinit, LogicalVector newflag);
+RcppExport SEXP _bisamcore_bisam_rnlp(SEXP ySEXP, SEXP xSEXP, SEXP priorSEXP, SEXP tauSEXP, SEXP phiSEXP, SEXP niterSEXP, SEXP burninSEXP, SEXP thinitSEXP, SEXP newflagSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -109,7 +109,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type niter(niterSEXP);
     Rcpp::traits::input_parameter< int >::type burnin(burninSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type thinit(thinitSEXP);
-    rcpp_result_gen = Rcpp::wrap(bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit));
+    Rcpp::traits::input_parameter< LogicalVector >::type newflag(newflagSEXP);
+    rcpp_result_gen = Rcpp::wrap(bisam_rnlp(y, x, prior, tau, phi, niter, burnin, thinit, newflag));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -120,7 +121,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_bisamcore_bisam_imom_stats", (DL_FUNC) &_bisamcore_bisam_imom_stats, 1},
     {"_bisamcore_bisam_ms_gibbs", (DL_FUNC) &_bisamcore_bisam_ms_gibbs, 13},
     {"_bisamcore_bisam_log_joint", (DL_FUNC) &_bisamcore_bisam_log_joint, 11},
-    {"_bisamcore_bisam_rnlp", (DL_FUNC) &_bisamcore_bisam_rnlp, 8},
+    {"_bisamcore_bisam_rnlp", (DL_FUNC) &_bisamcore_bisam_rnlp, 9},
     {NULL, NULL, 0}
 };
 

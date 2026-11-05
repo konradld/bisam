@@ -21,7 +21,7 @@ bisam_log_joint <- function(y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a
     .Call(`_bisamcore_bisam_log_joint`, y, x, sel, prior, tau, phi, priorDelta, p_incl, bb_a, bb_b, imom_method)
 }
 
-bisam_rnlp <- function(y, x, prior, tau, phi, niter, burnin, thinit) {
-    .Call(`_bisamcore_bisam_rnlp`, y, x, prior, tau, phi, niter, burnin, thinit)
+bisam_rnlp <- function(y, x, prior, tau, phi, niter, burnin, thinit, newflag = logical()) {
+    .Call(`_bisamcore_bisam_rnlp`, y, x, prior, tau, phi, niter, burnin, thinit, newflag)
 }
 

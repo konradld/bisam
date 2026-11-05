@@ -20,7 +20,7 @@
 //    Integrated likelihoods of visited models are cached within a call.
 //
 //  * bisam_rnlp(): break-size draws from the non-local posterior given the selected
-//    model and known phi (port of mombf's rnlpPost_lm_new / rnlp_Gibbs).
+//    model and known phi (from mombf's rnlpPost_lm_new / rnlp_Gibbs, with accuracy fixes).
 //
 //  * bisam_log_joint(), bisam_imom_mode(), bisam_imom_stats(),
 //    bisam_set_imom_exhaustive_max(): diagnostics and tests.
@@ -685,8 +685,15 @@ double bisam_log_joint(NumericVector y, NumericMatrix x, IntegerVector sel, int 
 // prior penalty, which turns the non-local posterior into a N(m, phi S^{-1}) truncated to
 // |th_j| >= upper_j; the truncated normal is then sampled one coordinate at a time in the
 // whitened scale z = chol(S^{-1})^{-1} th / sqrt(phi). Matrix helpers keep mombf's loop order.
-// The only change is that Normal cdf/quantiles come from R (pnorm/qnorm) instead of
-// mombf's copy of dcdflib.
+// Changes to mombf (for accuracy):
+//  * truncated-normal draws use log-scale tail probabilities/quantiles (mombf computed 1 - Phi
+//    in the upper tail and clamped quantiles at 8.2 sd, which biased draws far from the mean);
+//  * the inverse iMOM penalty is solved to machine precision (mombf: |error| <= 1e-5, log scale);
+//  * optional `newflag`: coordinates without a valid previous value start at the maximiser of
+//    their conditional posterior instead of an arbitrary value.
+// The stationary distribution was checked against exact (numerically integrated) 1- and 2-d
+// posteriors. The chain mixes slowly for correlated coefficients, so a caller that needs a fresh
+// draw (e.g. after the model changed) should run enough iterations (estimate_bisam: rnlp_iter).
 // ---------------------------------------------------------------------------
 typedef std::vector<double> dvec;
 typedef std::vector<dvec> dmat;   // row-major, dense p x p
@@ -740,33 +747,54 @@ static void matvec(const dmat &A, const dvec &x, dvec &z, int n) {
   }
 }
 
-static inline double pnorm_c(double y, double m, double s) {   // mombf pnormC clamps
-  double z = (y - m) / s;
-  if (z < -20.0) return 2.753624e-89;
-  if (z > 20.0) return 1 - 2.753624e-89;
-  return R::pnorm(y, m, s, 1, 0);
+// Log probability of [a, b] under N(0, 1), accurate far into either tail: intervals above
+// the mean use upper-tail probabilities, intervals below use lower-tail ones (log scale).
+static double lmass_std(double a, double b) {
+  if (a >= 0.0) {
+    double la = R::pnorm(a, 0.0, 1.0, 0, 1), lb = R::pnorm(b, 0.0, 1.0, 0, 1);
+    return la + std::log1p(-std::exp(lb - la));
+  }
+  if (b <= 0.0) {
+    double la = R::pnorm(a, 0.0, 1.0, 1, 1), lb = R::pnorm(b, 0.0, 1.0, 1, 1);
+    return lb + std::log1p(-std::exp(la - lb));
+  }
+  return std::log(R::pnorm(b, 0.0, 1.0, 1, 0) - R::pnorm(a, 0.0, 1.0, 1, 0));
 }
 
-static inline double qnorm_c(double cdf, double m, double s) { // mombf qnormC clamps
-  if (cdf <= 2.753624e-89) return -20.0 * s + m;
-  if (cdf >= 0.99999999999999989) return 8.209536 * s + m;
-  return R::qnorm(cdf, m, s, 1, 0);
+// Inverse-cdf draw from N(0, 1) truncated to [a, b] given v ~ U(0, 1), computed on the tail
+// where the probabilities are accurate (log scale), so it stays exact far into the tails.
+static double qtrunc_std(double a, double b, double v) {
+  double x;
+  if (a >= 0.0) {          // upper tail: S(x) = S(a) - v (S(a) - S(b))
+    double la = R::pnorm(a, 0.0, 1.0, 0, 1), lb = R::pnorm(b, 0.0, 1.0, 0, 1);
+    x = R::qnorm(la + std::log1p(-v * (-std::expm1(lb - la))), 0.0, 1.0, 0, 1);
+  } else if (b <= 0.0) {   // lower tail: mirror image
+    double la = R::pnorm(-b, 0.0, 1.0, 0, 1), lb = R::pnorm(-a, 0.0, 1.0, 0, 1);
+    x = -R::qnorm(la + std::log1p(-(1.0 - v) * (-std::expm1(lb - la))), 0.0, 1.0, 0, 1);
+  } else {                 // interval around the mean: plain cdf is accurate
+    double pa = R::pnorm(a, 0.0, 1.0, 1, 0), pb = R::pnorm(b, 0.0, 1.0, 1, 0);
+    x = R::qnorm(pa + v * (pb - pa), 0.0, 1.0, 1, 0);
+  }
+  return std::min(std::max(x, a), b);  // guard against rounding at the interval ends
 }
 
 // One draw from N(m, 1) restricted to the union of the disjoint ordered intervals
-// [lo[i], hi[i]], i = 0..nint-1 (mombf rnorm_truncMult with n = 1, s = 1)
+// [lo[i], hi[i]], i = 0..nint-1. Same scheme as mombf's rnorm_truncMult (one uniform: pick
+// the interval by its probability, then invert the cdf inside it), but with probabilities and
+// quantiles computed on the log scale in the appropriate tail. mombf computed 1 - Phi in the
+// upper tail and clamped quantiles at 8.2 sd, which biased draws far from the mean.
 static double rnorm_trunc_union(const dvec &lo, const dvec &hi, int nint, double m) {
-  dvec p0(nint), p1(nint), cump(nint + 1);
-  cump[0] = 0.0;
-  for (int i = 0; i < nint; i++) {
-    p0[i] = pnorm_c(lo[i], m, 1.0);
-    p1[i] = pnorm_c(hi[i], m, 1.0);
-    cump[i + 1] = std::max(cump[i] + 1.0e-30, cump[i] + p1[i] - p0[i]);
-  }
-  double u = unif_rand() * cump[nint];
+  dvec lm(nint);
+  double lmax = R_NegInf;
+  for (int i = 0; i < nint; i++) { lm[i] = lmass_std(lo[i] - m, hi[i] - m); lmax = std::max(lmax, lm[i]); }
+  double tot = 0.0;
+  for (int i = 0; i < nint; i++) { lm[i] = std::exp(lm[i] - lmax); tot += lm[i]; }
+  double u = unif_rand() * tot, cum = 0.0;
   int j = 0;
-  while ((u > cump[j + 1]) && (j < nint - 1)) j++;
-  return qnorm_c(p0[j] + u - cump[j], m, 1.0);
+  while (j < nint - 1 && u > cum + lm[j]) { cum += lm[j]; j++; }
+  double v = (lm[j] > 0.0) ? (u - cum) / lm[j] : 0.5;
+  v = std::min(std::max(v, 0.0), 1.0);
+  return m + qtrunc_std(lo[j] - m, hi[j] - m, v);
 }
 
 // One Gibbs sweep for z ~ N(alpha, I) with (D z)_k outside (lower[k], upper[k]) for all k.
@@ -826,46 +854,47 @@ static inline double pen_imom_log(double th, double phi, double tau) {
 
 // Inverse of the iMOM log-penalty: |th| s.t. pen_imom_log(th) = loglambda (mombf invpen_imom_sandwich)
 static double invpen_imom(double loglambda, double phi, double tau) {
-  const int maxiter = 50; const double ftol = 1.0e-5;
+  // In z = th^2 the log-penalty g(z) = const - log z - tau phi / z + z / (2 tau phi) is strictly
+  // increasing (its derivative times z^2 is z^2/(2 tau phi) - z + tau phi > 0), so the root is
+  // unique. Bracket it as in mombf, then refine by safeguarded Newton to machine precision
+  // (mombf stopped at |g - loglambda| <= 1e-5 using linear interpolation).
+  const double tp = tau * phi;
+  auto g = [&](double z) { return pen_imom_log(std::sqrt(z), phi, tau); };
   double b = .5 * (std::log(tau * tau) + 2.0 * std::log(phi) + std::log(2.0)) - loglambda;
   double d = std::sqrt(b * b + 2.0);
-  double zcur = tau * phi * (-b + d), thcur = std::sqrt(zcur), fcur = pen_imom_log(thcur, phi, tau);
-  double zlow, flow, zup, fup, thlow, thup;
+  double zcur = tp * (-b + d), fcur = g(zcur), zlow, zup;
   if (fcur >= loglambda) {
-    zlow = .8 * .8 * zcur; thlow = std::sqrt(zlow); flow = pen_imom_log(thlow, phi, tau);
-    while (flow >= loglambda) {
-      zcur = zlow; thcur = thlow; fcur = flow;
-      zlow = .8 * .8 * zcur; thlow = std::sqrt(zlow); flow = pen_imom_log(thlow, phi, tau);
-    }
-    zup = zcur; fup = fcur;
+    zup = zcur; zlow = .8 * .8 * zcur;
+    while (g(zlow) >= loglambda) { zup = zlow; zlow = .8 * .8 * zlow; }
   } else {
-    zup = 1.2 * 1.2 * zcur; thup = std::sqrt(zup); fup = pen_imom_log(thup, phi, tau);
-    while (fup <= loglambda) {
-      zcur = zup; thcur = thup; fcur = fup;
-      zup = 1.2 * 1.2 * zcur; thup = std::sqrt(zup); fup = pen_imom_log(thup, phi, tau);
-    }
-    zlow = zcur; flow = fcur;
+    zlow = zcur; zup = 1.2 * 1.2 * zcur;
+    while (g(zup) <= loglambda) { zlow = zup; zup = 1.2 * 1.2 * zup; }
   }
-  double err = fcur - loglambda;
-  for (int i = 1; i < maxiter && std::fabs(err) > ftol; i++) {
-    double slope = (fup - flow) / (zup - zlow);
-    zcur = zlow + (loglambda - flow) / slope;
-    thcur = std::sqrt(zcur);
-    fcur = pen_imom_log(thcur, phi, tau);
-    err = fcur - loglambda;
-    if (err > 0) { zup = zcur; fup = fcur; } else { zlow = zcur; flow = fcur; }
+  double z = (zcur > zlow && zcur < zup) ? zcur : 0.5 * (zlow + zup);
+  for (int it = 0; it < 100; it++) {
+    double f = g(z) - loglambda;
+    if (f == 0.0) break;
+    if (f > 0.0) zup = z; else zlow = z;
+    double fp = -1.0 / z + tp / (z * z) + 1.0 / (2.0 * tp);   // g'(z) > 0
+    double znew = z - f / fp;
+    if (!(znew > zlow && znew < zup)) znew = 0.5 * (zlow + zup);
+    if (std::fabs(znew - z) <= 1e-15 * z || zup - zlow <= 1e-15 * zup) { z = znew; break; }
+    z = znew;
   }
-  return thcur;
+  return std::sqrt(z);
 }
 
 // Returns the last draw (length ncol(x)); niter Gibbs iterations, the first `burnin` discarded.
+// niter = burnin = 0 returns the starting values (after the newflag initialisation).
 // [[Rcpp::export]]
 NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau, double phi,
-                         int niter, int burnin, NumericVector thinit) {
+                         int niter, int burnin, NumericVector thinit,
+                         LogicalVector newflag = LogicalVector()) {
   const int n = y.size(), p = x.ncol();
   if (x.nrow() != n) stop("bisam_rnlp: dimensions of y and x do not match");
   if (thinit.size() != p) stop("bisam_rnlp: thinit must have length ncol(x)");
-  if (niter - burnin < 1) stop("bisam_rnlp: niter must exceed burnin");
+  if (niter == 0 && burnin == 0) { /* diagnostics: return the starting values (after newflag initialisation) */ }
+  else if (niter - burnin < 1) stop("bisam_rnlp: niter must exceed burnin");
   if (prior != 0 && prior != 1) stop("bisam_rnlp: prior must be 0 (MOM) or 1 (iMOM)");
   const double *X = x.begin(), *Y = y.begin();
 
@@ -905,6 +934,35 @@ NumericVector bisam_rnlp(NumericVector y, NumericMatrix x, int prior, double tau
   }
 
   dvec th(thinit.begin(), thinit.end()), lower(p), upper(p), z(p);
+
+  // Starting values for coordinates flagged in `newflag` (e.g. breaks that just entered the
+  // model, whose previous value is stale): set each, in turn, to the maximiser of the
+  // conditional posterior given the other coordinates, choosing the better sign. With
+  // -log posterior = .5 th'S th / phi - th'X'y / phi - sum log d(th_j), the 1-d section is
+  //   pMOM : .5 a y^2 - B y - 2 log y,                       a = S_jj / phi
+  //   piMOM: .5 a' y^2 - B y + tau phi / y^2 + 2 log y,      a' = S_jj / phi - 1/(tau phi)
+  // (y = |th_j| on a given sign side, B = sign * partial residual).
+  if (newflag.size() > 0) {
+    if (newflag.size() != p) stop("bisam_rnlp: newflag must have length ncol(x)");
+    for (int j = 0; j < p; j++) {
+      if (!newflag[j]) continue;
+      double Bj = Xty[j];
+      for (int k = 0; k < p; k++) if (k != j) Bj -= S[j][k] * th[k];
+      Bj /= phi;
+      double a = S[j][j] / phi, yp, ym, gp, gm;
+      if (prior == 0) {
+        yp = (Bj + std::sqrt(Bj * Bj + 8.0 * a)) / (2.0 * a);
+        ym = (-Bj + std::sqrt(Bj * Bj + 8.0 * a)) / (2.0 * a);
+        gp = 0.5 * a * yp * yp - Bj * yp - 2.0 * std::log(yp);
+        gm = 0.5 * a * ym * ym + Bj * ym - 2.0 * std::log(ym);
+      } else {
+        double ap = a - 1.0 / (tau * phi);
+        yp = best_positive_min(ap,  Bj, tau * phi, std::sqrt(tau * phi), &gp);
+        ym = best_positive_min(ap, -Bj, tau * phi, std::sqrt(tau * phi), &gm);
+      }
+      th[j] = (gp <= gm) ? yp : -ym;
+    }
+  }
   for (int it = 1; it <= niter; it++) {
     for (int i = 0; i < p; i++) {
       if (prior == 0) {           // MOM, r = 1: slice under (th^2 / (phi tau))

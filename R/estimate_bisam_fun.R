@@ -15,6 +15,7 @@ estimate_bisam <- function(
     beta_prior = "g",  # Options: "g" (Zellner's G-Prior), "f" (Hagan's Fractional Prior)
     step_size_prior = c("mom", "imom"),
     imom_marginal = c("ala_legacy", "ala", "laplace"), # iMOM integrated likelihood (see below)
+    rnlp_iter = 25L,           # break-size Gibbs iterations after a unit's break set changed; see below
     step_incl_prior = c("bern", "beta_bern"),
     # Prior hyperparameters
     beta_variance_scale = 1000, # Variance scaling parameter for beta coefficients
@@ -306,7 +307,6 @@ estimate_bisam <- function(
   # ============================================================================
   b_i <- beta_mean
   g_i <- numeric(r)
-  g_incl_i <- rep(sd(y) / 100, r)  # Always non-zero for rnlp within Gibbs
   s2_i <- rep(1 / rgamma(1, shape = sigma2_shape, rate = sigma2_rate), N)
   sqrt_s2_i <- sqrt(s2_i)
   
@@ -447,8 +447,19 @@ estimate_bisam <- function(
   
   nn <- 2 # number of model-selection Gibbs iterations (burn-in nn - 1)
   
-  ngdraw <- 1 # number of break-size (rnlp) Gibbs iterations saved
-  ngburn <- 2 # number of break-size (rnlp) Gibbs iterations burned
+  # Break sizes are drawn with the latent truncation Gibbs sampler (Rossell & Telesca 2017,
+  # Alg. 2). The break indicators are drawn with the sizes integrated out, so:
+  #  * if a unit's set of breaks is unchanged, its previous sizes are already a draw from their
+  #    conditional posterior and one Gibbs iteration (invariant for the new conditional, given
+  #    the updated beta and sigma^2) is a valid update;
+  #  * if the set changed, the previous sizes belong to another model, so a converged draw is
+  #    needed: rnlp_iter iterations, new breaks starting at their conditional posterior mode.
+  # Earlier code: 3 iterations always, new breaks started from stale values. In full runs with
+  # many breaks (MOM prior) this inflated sigma^2 by ~5% and shifted break sizes and PIPs.
+  # With this scheme, rnlp_iter = 25 matched a 200-iteration reference within Monte Carlo
+  # error; rnlp_iter = 12 still left sigma^2 about 1% too high.
+  rnlp_iter <- as.integer(rnlp_iter)
+  if (rnlp_iter < 1) stop("rnlp_iter must be >= 1")
   
   # Initialize objects in loop
   y_aug <- y
@@ -715,19 +726,24 @@ estimate_bisam <- function(
           phi_rnlp <- s2_i_tmp[j]
         }
         
-        # Non-local posterior draw of the selected break sizes (known phi), started at
-        # the last non-zero draw of each break
+        # Non-local posterior draw of the selected break sizes (known phi). Breaks that stay
+        # in the model start from their previous draw; breaks that just entered (previous
+        # value 0) start at the maximiser of their conditional posterior given the others.
+        g_prev <- g_i[p_idx_full][colsel]
+        is_new <- g_prev == 0                       # break just entered (was excluded)
+        set_changed <- any((g_i[p_idx_full] != 0) != w_i[p_idx_full])  # a break entered or left
+        n_rnlp <- if (set_changed) rnlp_iter else 1L
         g_draw[colsel] <- bisamcore::bisam_rnlp(
           y = as.vector(y_rnlp),
           x = z_rnlp,
           prior = sis_prior_code,
           tau = step_size_scale,
           phi = phi_rnlp,
-          niter = ngburn + ngdraw,
-          burnin = ngburn,
-          thinit = g_incl_i[p_idx_full][colsel]
+          niter = n_rnlp,
+          burnin = n_rnlp - 1L,
+          thinit = ifelse(is_new, 1, g_prev),
+          newflag = is_new
         )
-        g_incl_i[p_idx][w_i[p_idx]] <- g_draw[colsel]
       }
       g_i[p_idx_full] <- g_draw
     }
